@@ -1,4 +1,4 @@
- // ===== 1. API KEY =====
+// ===== 1. API KEY =====
 let API_KEY = localStorage.getItem('jarvis_key');
 if(!API_KEY){ API_KEY = prompt('Enter your Gemini API Key:'); if(API_KEY) localStorage.setItem('jarvis_key', API_KEY); }
 const MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"];
@@ -88,7 +88,6 @@ async function handleTools(text){
       return 'Wikipedia summary: '+result.title+(snippet?'. '+snippet:'');
     }catch(e){ return 'Search error, Boss.'; }
   }
-
   if(/\b(?:what time(?: is it)?|what is the time|current time|tell me the time|time now)\b/.test(t)||/^\s*time(?:\s+please)?[.!?]*\s*$/.test(t)||t.includes('టైమ్')||t.includes('సమయం')||t.includes('samayam'))
     return 'The time is '+new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'numeric',minute:'2-digit'})+' IST, Boss.';
 
@@ -228,6 +227,7 @@ async function handleTools(text){
     return 'Your strong password: '+password.join('');
   }
 
+
   if(t.includes('bitcoin')||t.includes('crypto')){
     try{
       const data=await fetchToolJson('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,inr');
@@ -240,7 +240,6 @@ async function handleTools(text){
 
   return null;
 }
-
 // ===== 3.5. AGENT MODE =====
 // Reuse the tools already implemented above; this avoids undefined getWeather/getNews/getCrypto helpers.
 const AGENT_TOOLS = Object.freeze({
@@ -257,6 +256,7 @@ function isAgentModeRequest(text=''){
   const value=String(text||'');
   if(/\b(?:agent(?:\s+mode)?|run\s+(?:the\s+)?agent|use\s+(?:the\s+)?agent)\b/i.test(value)) return true;
   if(/\b(?:briefing|research|analy[sz]e|analysis)\b/i.test(value)) return true;
+  // Don't hijack ordinary requests such as “plan my day”.
   return /\bplan\b/i.test(value)&&/\b(?:time|weather|news|crypto|bitcoin|btc)\b/i.test(value);
 }
 
@@ -346,7 +346,7 @@ async function runAgent(goal){
     add('J.A.R.V.I.S: Gemini busy undi; available tool results tho reply chesthunna.','ai');
     return localAgentSummary(results);
   }
- }
+}
 // ===== 4. GEMINI BRAIN =====
 async function callGemini(p){
   if(!API_KEY) throw new Error('Gemini API key is missing. Reload the page and enter your key.');
@@ -356,11 +356,12 @@ async function callGemini(p){
   for(const m of MODELS){
     try{
       const res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(API_KEY),
-        {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for Boss. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss."}]},contents:contents})});
+        {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for Boss. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss. Match the user's language and context."}]},contents:contents})});
       const data=await res.json();
       if(data.error){
         const message=data.error.message || 'Gemini request failed.';
         lastErr=new Error(message);
+        // Retry another configured model when this model is missing or unavailable.
         if(/high demand|temporar|quota|rate|unavailable|no longer available|deprecated|not found|not supported|does not exist|unknown model/i.test(message)) continue;
         throw lastErr;
       }
@@ -423,7 +424,6 @@ function telugishToolReply(r){
   if(r.endsWith(', Boss.')) return r.slice(0,-7)+'.';
   return r;
 }
-
 async function askGemini(p){
   add('J.A.R.V.I.S: Thinking...','ai');
   if(isAgentModeRequest(p)){
@@ -468,110 +468,22 @@ imgInput.onchange=()=>{
   };
   reader.readAsDataURL(file);
 };
-
 async function askVision(base64,mime,q){
   add('J.A.R.V.I.S: Analyzing image...','ai');
-  if(!API_KEY){chat.lastChild.innerText='J.A.R.V.I.S: ERROR - Gemini API key is missing. Reload the page and enter your key.';return;}
-  let lastErr;
-  for(const m of MODELS){
-    try{
-      const res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(API_KEY),
-        {method:"POST",headers:{"Content-Type":"application/json"},
-         body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for Boss. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss."}]},contents:[{parts:[{text:q},{inline_data:{mime_type:mime,data:base64}}]}]})});
-      const data=await res.json();
-      if(data.error){
-        const message=data.error.message || 'Gemini image request failed.';
-        lastErr=new Error(message);
-        if(/high demand|temporar|quota|rate|unavailable|no longer available|deprecated|not found|not supported|does not exist|unknown model/i.test(message)) continue;
-        throw lastErr;
-      }
-      const reply=data?.candidates?.[0]?.content?.parts?.map(part=>part.text).filter(Boolean).join('\n');
-      if(!reply){
-        const reason=data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason;
-        throw new Error(reason ? 'Gemini could not analyze this image ('+reason+').' : 'Gemini returned an empty response.');
-      }
-      chat.lastChild.innerText='J.A.R.V.I.S: '+reply; speak(reply); return;
-    }catch(e){ lastErr=e; }
-  }
-  chat.lastChild.innerText='J.A.R.V.I.S: ERROR - '+lastErr.message;
-}
-
-// ===== 6. SPEECH + TTS =====
+  if(!API_KEY){chat.lastChild.innerText='J.A.R.V.I.S:
+   // ===== 6. SPEECH + TTS =====
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const rec=SR?new SR():null; if(rec)rec.lang='en-US';
-
-if(rec)rec.onresult=(e)=>{
-  const t=e.results[0][0].transcript;
-  add('YOU: '+t,'user');
-  askGemini(t);
-};
-
-micBtn.onclick=()=>{
-  if(!rec){
-    add('SYSTEM: Voice input is not supported in this browser.','ai');
-    return;
-  }
-  try{
-    rec.start();
-    micBtn.innerText='LISTENING...';
-  }catch(e){
-    micBtn.innerText='🎙️';
-  }
-};
-
+if(rec)rec.onresult=(e)=>{const t=e.results[0][0].transcript;add('YOU: '+t,'user');askGemini(t);};
+micBtn.onclick=()=>{if(!rec){add('SYSTEM: Voice input is not supported in this browser.','ai');return;}try{rec.start();micBtn.innerText='LISTENING...';}catch(e){micBtn.innerText='🎙️';}};
 if(rec)rec.onend=()=>{micBtn.innerText='🎙️';};
-
-let voices=[];
-function loadVoices(){
-  if(!('speechSynthesis' in window))return;
-  try{voices=window.speechSynthesis.getVoices();}catch(e){voices=[];}
-}
-
-loadVoices();
-
-if('speechSynthesis' in window)
-  window.speechSynthesis.onvoiceschanged=loadVoices;
-
-function speak(t){
-  if(!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance==='undefined')return;
-  const u=new SpeechSynthesisUtterance(t);
-  u.rate=0.96;
-  u.pitch=1.0;
-  const isTelugu=/[\u0C00-\u0C7F]/.test(t);
-  const v=isTelugu?voices.find(v=>/^te[-_]/i.test(v.lang)):voices.find(v=>/^en[-_]/i.test(v.lang));
-  if(v){
-    u.voice=v;
-    u.lang=v.lang;
-  }else if(isTelugu){
-    u.lang='te-IN';
-  }
-  try{
-    window.speechSynthesis.speak(u);
-  }catch(e){
-    console.warn('Speech output unavailable:',e);
-  }
-}
+let voices=[]; function loadVoices(){ if(!('speechSynthesis' in window))return; try{voices=window.speechSynthesis.getVoices();}catch(e){voices=[];} }
+loadVoices(); if('speechSynthesis' in window)window.speechSynthesis.onvoiceschanged=loadVoices;
+function speak(t){ if(!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance==='undefined')return; const u=new SpeechSynthesisUtterance(t); u.rate=0.96; u.pitch=1.0;
+  const isTelugu=/[\u0C00-\u0C7F]/.test(t); const v=isTelugu?voices.find(v=>/^te[-_]/i.test(v.lang)):voices.find(v=>/^en[-_]/i.test(v.lang)); if(v){u.voice=v;u.lang=v.lang;}else if(isTelugu)u.lang='te-IN'; try{window.speechSynthesis.speak(u);}catch(e){console.warn('Speech output unavailable:',e);} }
 
 // ===== 7. SEND + CLEAR =====
-document.getElementById('send').onclick=()=>{
-  const t=input.value.trim();
-  if(!t)return;
-  add('YOU: '+t,'user');
-  input.value='';
-  askGemini(t);
-};
-
-clearBtn.onclick=()=>{
-  MEMORY=[];
-  saveMemory();
-  chat.innerHTML='';
-  add('SYSTEM: Memory cleared.','ai');
-};
-
-function add(t,w){
-  const d=document.createElement('div');
-  d.className='msg '+w;
-  d.innerText=t;
-  chat.appendChild(d);
-  chat.scrollTop=chat.scrollHeight;
-   }
+document.getElementById('send').onclick=()=>{ const t=input.value.trim(); if(!t)return;
+  add('YOU: '+t,'user'); input.value=''; askGemini(t); };
+clearBtn.onclick=()=>{ MEMORY=[]; saveMemory(); chat.innerHTML=''; add('SYSTEM: Memory cleared.','ai'); };
+function add(t,w){const d=document.createElement('div');d.className='msg '+w;d.innerText=t;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
