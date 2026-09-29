@@ -1,4 +1,4 @@
-// ===== 1. API KEY =====
+ // ===== 1. API KEY =====
 let API_KEY = localStorage.getItem('jarvis_key');
 if(!API_KEY){ API_KEY = prompt('Enter your Gemini API Key:'); if(API_KEY) localStorage.setItem('jarvis_key', API_KEY); }
 const MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"];
@@ -227,7 +227,6 @@ async function handleTools(text){
     return 'Your strong password: '+password.join('');
   }
 
-
   if(t.includes('bitcoin')||t.includes('crypto')){
     try{
       const data=await fetchToolJson('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,inr');
@@ -346,8 +345,7 @@ async function runAgent(goal){
     add('J.A.R.V.I.S: Gemini busy undi; available tool results tho reply chesthunna.','ai');
     return localAgentSummary(results);
   }
-}
-
+  }
 // ===== 4. GEMINI BRAIN =====
 async function callGemini(p){
   if(!API_KEY) throw new Error('Gemini API key is missing. Reload the page and enter your key.');
@@ -357,7 +355,7 @@ async function callGemini(p){
   for(const m of MODELS){
     try{
       const res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(API_KEY),
-        {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for Vamshi. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss. Match the user's language and context."}]},contents:contents})});
+        {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for Boss. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss."}]},contents:contents})});
       const data=await res.json();
       if(data.error){
         const message=data.error.message || 'Gemini request failed.';
@@ -425,6 +423,7 @@ function telugishToolReply(r){
   if(r.endsWith(', Boss.')) return r.slice(0,-7)+'.';
   return r;
 }
+
 async function askGemini(p){
   add('J.A.R.V.I.S: Thinking...','ai');
   if(isAgentModeRequest(p)){
@@ -469,15 +468,16 @@ imgInput.onchange=()=>{
   };
   reader.readAsDataURL(file);
 };
+
 async function askVision(base64,mime,q){
   add('J.A.R.V.I.S: Analyzing image...','ai');
-  if(!API_KEY){chat.lastChild.innerText='J.A.R.V.I.S: ERROR - Gemini API key is missing. Reload the page and enter your key.';return;}
+  if(!API_KEY){chat.lastChild.innerText='J.A.R.V.I.S: ERROR - Gemini API key is missing. Reload the page and enter the key.';return;}
   let lastErr;
   for(const m of MODELS){
     try{
       const res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(API_KEY),
         {method:"POST",headers:{"Content-Type":"application/json"},
-         body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for boss. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss."}]},contents:[{parts:[{text:q},{inline_data:{mime_type:mime,data:base64}}]}]})});
+         body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for Boss. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss."}]},contents:[{parts:[{text:q},{inline_data:{mime_type:mime,data:base64}}]}]})});
       const data=await res.json();
       if(data.error){
         const message=data.error.message || 'Gemini image request failed.';
