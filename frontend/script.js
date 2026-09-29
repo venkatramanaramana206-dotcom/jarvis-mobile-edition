@@ -347,6 +347,7 @@ async function runAgent(goal){
     return localAgentSummary(results);
   }
 }
+
 // ===== 4. GEMINI BRAIN =====
 async function callGemini(p){
   if(!API_KEY) throw new Error('Gemini API key is missing. Reload the page and enter your key.');
@@ -356,7 +357,7 @@ async function callGemini(p){
   for(const m of MODELS){
     try{
       const res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(API_KEY),
-        {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for Boss. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss. Match the user's language and context."}]},contents:contents})});
+        {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for Vamshi. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss. Match the user's language and context."}]},contents:contents})});
       const data=await res.json();
       if(data.error){
         const message=data.error.message || 'Gemini request failed.';
@@ -470,8 +471,32 @@ imgInput.onchange=()=>{
 };
 async function askVision(base64,mime,q){
   add('J.A.R.V.I.S: Analyzing image...','ai');
-  if(!API_KEY){chat.lastChild.innerText='J.A.R.V.I.S:
-   // ===== 6. SPEECH + TTS =====
+  if(!API_KEY){chat.lastChild.innerText='J.A.R.V.I.S: ERROR - Gemini API key is missing. Reload the page and enter your key.';return;}
+  let lastErr;
+  for(const m of MODELS){
+    try{
+      const res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(API_KEY),
+        {method:"POST",headers:{"Content-Type":"application/json"},
+         body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for Vamshi. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss."}]},contents:[{parts:[{text:q},{inline_data:{mime_type:mime,data:base64}}]}]})});
+      const data=await res.json();
+      if(data.error){
+        const message=data.error.message || 'Gemini image request failed.';
+        lastErr=new Error(message);
+        if(/high demand|temporar|quota|rate|unavailable|no longer available|deprecated|not found|not supported|does not exist|unknown model/i.test(message)) continue;
+        throw lastErr;
+      }
+      const reply=data?.candidates?.[0]?.content?.parts?.map(part=>part.text).filter(Boolean).join('\n');
+      if(!reply){
+        const reason=data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason;
+        throw new Error(reason ? 'Gemini could not analyze this image ('+reason+').' : 'Gemini returned an empty response.');
+      }
+      chat.lastChild.innerText='J.A.R.V.I.S: '+reply; speak(reply); return;
+    }catch(e){ lastErr=e; }
+  }
+  chat.lastChild.innerText='J.A.R.V.I.S: ERROR - '+lastErr.message;
+}
+
+// ===== 6. SPEECH + TTS =====
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const rec=SR?new SR():null; if(rec)rec.lang='en-US';
 if(rec)rec.onresult=(e)=>{const t=e.results[0][0].transcript;add('YOU: '+t,'user');askGemini(t);};
