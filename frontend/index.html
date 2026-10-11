@@ -1,345 +1,455 @@
- <!DOCTYPE html>
+ 
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#07111f">
-  <meta name="description" content="JARVIS AI Personal Assistant">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#030711">
+  <meta name="description" content="JARVIS - Your personal AI voice assistant">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 
-  <title>JARVIS AI Assistant</title>
+  <title>JARVIS — Hologram AI</title>
 
-  <link rel="stylesheet" href="style.css">
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./style.css">
+
+  <style>
+    /* Essential layout fallback */
+    .api-setup-screen:not(.active) { display: none; }
+    .api-setup-screen.active {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      padding: 20px;
+      background: #030711;
+    }
+    .api-setup-card {
+      width: 100%;
+      max-width: 410px;
+      padding: 24px;
+      border: 1px solid #00eaff;
+      border-radius: 24px;
+      background: #08162d;
+      color: #e9f8ff;
+    }
+    .api-setup-card label {
+      display: block;
+      margin: 14px 0 6px;
+    }
+    .api-setup-card input {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 46px;
+      padding: 12px;
+      border-radius: 10px;
+    }
+    #startJarvisBtn {
+      width: 100%;
+      min-height: 48px;
+      margin-top: 20px;
+    }
+    .api-logo {
+      display: grid;
+      place-items: center;
+      width: 68px;
+      height: 68px;
+      margin: auto;
+      border: 2px solid #00eaff;
+      border-radius: 50%;
+      color: #00eaff;
+      font-size: 36px;
+    }
+    .api-setup-card h1,
+    .api-setup-card .setup-description {
+      text-align: center;
+    }
+    .app-shell { width: 100%; max-width: 1000px; margin: auto; padding: 16px; }
+    .app-header, .app-footer, .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-orb {
+      display: grid;
+      place-items: center;
+      width: 52px;
+      height: 52px;
+      flex: 0 0 52px;
+      border: 2px solid #00eaff;
+      border-radius: 50%;
+      color: #00eaff;
+      box-shadow: 0 0 20px #00eaff55;
+      font-size: 25px;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border: 1px solid #234d69;
+      border-radius: 20px;
+      color: #7cefd9;
+      font-size: 12px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #35e5ad;
+      box-shadow: 0 0 10px #35e5ad;
+    }
+    .hero {
+      padding: 28px 12px;
+      text-align: center;
+    }
+    .hero-orb {
+      display: grid;
+      place-items: center;
+      width: clamp(130px, 42vw, 190px);
+      height: clamp(130px, 42vw, 190px);
+      margin: 16px auto 24px;
+      border: 2px solid #00eaff;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, #1474a8 0%, #09234c 38%, #030711 72%);
+      box-shadow:
+        0 0 0 9px #00eaff0d,
+        0 0 0 20px #00eaff08,
+        0 0 35px #008cff66,
+        inset 0 0 30px #00c8ff44;
+      color: #c6f9ff;
+      font-size: clamp(36px, 10vw, 60px);
+      animation: orbBreath 3s ease-in-out infinite;
+    }
+    .hero-orb.listening {
+      box-shadow: 0 0 0 12px #00eaff14, 0 0 55px #00eaffaa;
+    }
+    .hero-clock {
+      margin: 8px 0;
+      color: #e8f7ff;
+      font-size: clamp(32px, 9vw, 52px);
+      letter-spacing: 2px;
+    }
+    .hero-subtitle { color: #92aac4; }
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin: 16px 0 22px;
+    }
+    .quick-actions button {
+      min-width: 0;
+      min-height: 88px;
+      padding: 12px 5px;
+      border: 1px solid #203953;
+      border-radius: 18px;
+      background: linear-gradient(145deg, #10243b, #071222);
+      color: #e9f8ff;
+    }
+    .quick-actions button span {
+      display: block;
+      margin-bottom: 5px;
+      color: #53e9ff;
+      font-size: 23px;
+    }
+    .conversation {
+      padding: 16px;
+      border: 1px solid #203953;
+      border-radius: 24px;
+      background: #071322cc;
+    }
+    .conversation-heading { margin-bottom: 12px; }
+    #messages { overflow-y: auto; overflow-wrap: anywhere; }
+    .composer-tools {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .composer-tools button {
+      min-width: 46px;
+      min-height: 44px;
+      border: 1px solid #24506c;
+      border-radius: 14px;
+      background: #0b1d35;
+      color: #8fefff;
+    }
+    .composer-tools #micBtn {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border-color: #00eaff;
+      background: radial-gradient(circle, #087cff, #07162f);
+      box-shadow: 0 0 24px #008cff55;
+      font-size: 24px;
+    }
+    .app-footer {
+      margin-top: 18px;
+      padding: 12px 4px;
+      color: #7896b6;
+      font-size: 12px;
+    }
+    @keyframes orbBreath {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.035); }
+    }
+    @media (max-width: 360px) {
+      .app-shell { padding: 10px; }
+      .quick-actions { gap: 7px; }
+      .quick-actions button { min-height: 78px; font-size: 12px; }
+      .conversation { padding: 11px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .hero-orb { animation: none; }
+    }
+  </style>
 </head>
 
 <body>
 
- 
-<div id="apiSetupScreen" class="api-setup-screen">
-  <div class="api-setup-card">
-    <div class="api-logo">J</div>
-    <h1>JARVIS</h1>
-    <p>నీ AI Assistant‌ను ప్రారంభించు</p>
+  <!-- FIRST SCREEN: API setup -->
+  <div id="apiSetupScreen" class="api-setup-screen">
+    <div class="api-setup-card">
+      <div class="api-logo" aria-hidden="true">J</div>
+      <h1>JARVIS</h1>
+      <p class="setup-description">నీ AI Assistant‌ను ప్రారంభించు</p>
 
-    <label for="firstApiKey">API Key</label>
-    <input
-      id="firstApiKey"
-      type="password"
-      placeholder="నీ API Key ఇక్కడ పెట్టు"
-      autocomplete="off"
-      required
-    />
+      <form id="firstApiSetupForm">
+        <label for="firstApiKey">API Key</label>
+        <input
+          id="firstApiKey"
+          type="password"
+          placeholder="Paste your API key"
+          autocomplete="off"
+          autocapitalize="none"
+          spellcheck="false"
+          required
+        >
 
-    <label for="firstApiUrl">API URL</label>
-    <input
-      id="firstApiUrl"
-      type="url"
-      value="https://api.openai.com/v1/chat/completions"
-      required
-    />
+        <label for="firstApiUrl">API URL</label>
+        <input
+          id="firstApiUrl"
+          type="url"
+          value="https://api.openai.com/v1/chat/completions"
+          required
+        >
 
-    <label for="firstModel">Model Name</label>
-    <input
-      id="firstModel"
-      type="text"
-      value="gpt-4o-mini"
-      required
-    />
+        <label for="firstModel">Model Name</label>
+        <input
+          id="firstModel"
+          type="text"
+          value="gpt-4o-mini"
+          required
+        >
 
-    <button id="startJarvisBtn" type="button">
-      Save & Start JARVIS
-    </button>
-
-    <p id="apiSetupError" role="alert"></p>
+        <button id="startJarvisBtn" type="submit">
+          Save &amp; Start JARVIS
+        </button>
+        <p id="apiSetupError" role="alert" aria-live="polite"></p>
+      </form>
+    </div>
   </div>
-</div>
 
-  <main class="app">
+  <!-- MAIN JARVIS APP -->
+  <div id="appMain" class="app-shell">
 
-    <!-- HEADER -->
-    <header class="topbar">
+    <header class="app-header">
       <div class="brand">
-        <span class="orb">J</span>
-
+        <div class="brand-orb" aria-hidden="true">J</div>
         <div>
-          <h1>JARVIS</h1>
-          <small>PERSONAL AI ASSISTANT</small>
+          <h1 style="margin:0">JARVIS</h1>
+          <small class="hero-subtitle">PERSONAL AI ASSISTANT</small>
         </div>
       </div>
 
-      <button
-        id="settingsBtn"
-        class="icon-btn"
-        type="button"
-        aria-label="AI Settings">
+      <button id="settingsBtn" type="button" aria-label="Open settings">
         ⚙
       </button>
     </header>
 
-    <!-- LIVE DATE AND TIME -->
-    <section class="hero">
-      <div class="status">
-        <span class="pulse"></span>
-        SYSTEM ONLINE
+    <section class="hero" aria-label="Assistant status">
+      <div class="status-pill">
+        <span class="status-dot"></span>
+        <span id="systemStatus">SYSTEM ONLINE</span>
       </div>
 
-      <div id="clock" class="clock">--:--:--</div>
-
-      <div id="dateLine" class="date-line">
-        Loading date and time...
+      <div class="hero-orb" id="assistantOrb" aria-label="JARVIS assistant">
+        J
       </div>
 
-      <p class="hero-caption">
-        How can I help you today?
-      </p>
+      <div class="hero-clock" id="clock">--:--:--</div>
+      <div id="dateLine" class="hero-subtitle">Loading date...</div>
+
+      <p style="font-size:18px">How can I help you today?</p>
+      <p id="voiceStatus" aria-live="polite">Ready when you are</p>
     </section>
 
-    <!-- QUICK ACTIONS -->
-    <section class="quick-actions">
-
-      <button class="quick" data-command="What time is it?">
-        <span>◷</span>
-        Time
+    <section class="quick-actions" aria-label="Quick actions">
+      <button id="timeBtn" type="button">
+        <span>◷</span>Time
       </button>
-
-      <button class="quick" data-command="Tell me a joke">
-        <span>☻</span>
-        Joke
+      <button id="jokeBtn" type="button">
+        <span>☻</span>Joke
       </button>
-
-      <button class="quick" data-command="Give me an inspirational quote">
-        <span>✦</span>
-        Quote
+      <button id="quoteBtn" type="button">
+        <span>✦</span>Quote
       </button>
-
-      <button id="weatherBtn" class="quick">
-        <span>☁</span>
-        Weather
+      <button id="weatherBtn" type="button">
+        <span>☁</span>Weather
       </button>
-
-      <button id="searchBtn" class="quick">
-        <span>⌕</span>
-        Web Search
+      <button id="searchBtn" type="button">
+        <span>⌕</span>Web Search
       </button>
-
-      <button id="timerBtn" class="quick">
-        <span>⏱</span>
-        Timer
+      <button id="timerBtn" type="button">
+        <span>◴</span>Timer
       </button>
-
     </section>
 
-    <!-- AI CHAT -->
-    <section class="chat-panel">
-
-      <div class="panel-heading">
+    <section class="conversation" aria-label="Chat conversation">
+      <div class="section-heading conversation-heading">
         <div>
-          <span class="live-dot"></span>
-          Conversation
+          <span class="status-dot" style="display:inline-block"></span>
+          <strong> Conversation</strong>
         </div>
-
-        <button id="clearBtn" class="text-btn" type="button">
-          Clear
-        </button>
+        <button id="clearBtn" type="button">Clear</button>
       </div>
 
-      <div id="messages" class="messages" aria-live="polite">
-
-        <article class="message assistant">
-          <div class="avatar">J</div>
-
-          <div class="bubble">
-            Hello! I am Jarvis AI Assistant.
-            Ask me a question, use voice input,
-            or configure your AI API key in Settings.
-          </div>
-        </article>
-
+      <div id="typing" hidden aria-live="polite">JARVIS is thinking...</div>
+      <div id="messages" role="log" aria-live="polite" aria-relevant="additions">
       </div>
 
-      <div id="typing" class="typing" hidden>
-        JARVIS IS THINKING...
-      </div>
-
-      <!-- MESSAGE INPUT -->
-      <form id="chatForm" class="composer">
-
-        <button
-          type="button"
-          id="micBtn"
-          class="mic-btn"
-          aria-label="Voice input"
-          title="Voice input">
-          🎙
-        </button>
-
+      <form id="chatForm">
         <input
           id="userInput"
           type="text"
-          placeholder="Ask Jarvis anything..."
+          placeholder="Message JARVIS..."
           autocomplete="off"
-          aria-label="Enter your message"
-          required>
-
-        <button
-          type="submit"
-          class="send-btn"
-          aria-label="Send message">
-          ➤
-        </button>
-
+          aria-label="Type your message"
+        >
+        <button type="submit" aria-label="Send message">➤</button>
       </form>
 
-      <div id="voiceStatus" class="hint">
-        Type a message or use the microphone.
+      <div class="composer-tools">
+        <button id="micBtn" type="button" aria-label="Start voice input">🎙</button>
+        <button id="speakBtn" type="button" aria-label="Speak latest answer">🔊</button>
+        <button id="stopSpeakBtn" type="button" aria-label="Stop speaking">⏹</button>
+        <button id="calcBtn" type="button" aria-label="Calculator">＋</button>
+        <button id="passwordBtn" type="button" aria-label="Generate password">🔐</button>
+        <button id="musicBtn" type="button" aria-label="Open music">♫</button>
+        <button id="filesBtn" type="button" aria-label="Choose file">📎</button>
+        <input id="filePicker" type="file" hidden>
       </div>
-
     </section>
 
-    <!-- ASSISTANT TOOLS -->
-    <section class="tools-panel">
-
-      <h2>Assistant Tools</h2>
-
-      <div class="tool-grid">
-
-        <button id="calcBtn" class="tool" type="button">
-          🧮
-          <span>Calculator</span>
-        </button>
-
-        <button id="passwordBtn" class="tool" type="button">
-          🔐
-          <span>Password</span>
-        </button>
-
-        <button id="speakBtn" class="tool" type="button">
-          🔊
-          <span>Read Reply</span>
-        </button>
-
-        <button id="stopSpeakBtn" class="tool" type="button">
-          🔇
-          <span>Stop Speech</span>
-        </button>
-
-        <button id="musicBtn" class="tool" type="button">
-          🎵
-          <span>Music Search</span>
-        </button>
-
-        <button id="filesBtn" class="tool" type="button">
-          📁
-          <span>Choose Files</span>
-        </button>
-
-      </div>
-
-      <input
-        id="filePicker"
-        type="file"
-        multiple
-        hidden>
-
-      <div
-        id="toolOutput"
-        class="tool-output"
-        hidden>
-      </div>
-
+    <section id="toolOutput" aria-live="polite" style="margin-top:14px">
     </section>
 
-    <!-- FOOTER -->
-    <footer>
-      JARVIS AI · Smart · Fast · Personal
+    <footer class="app-footer">
+      <span>JARVIS • Hologram AI</span>
+      <span>Voice · Chat · Tools</span>
     </footer>
+  </div>
 
-  </main>
-
-  <!-- API SETTINGS DIALOG -->
+  <!-- Settings dialog -->
   <dialog id="settingsDialog">
+    <h2>JARVIS Settings</h2>
 
-    <form id="settingsForm" class="settings-form">
+    <form id="settingsForm">
+      <label for="apiKey">API Key</label>
+      <input id="apiKey" type="password" autocomplete="off"
+        placeholder="Enter API key">
 
-      <div class="dialog-title">
+      <label for="apiUrl">API URL</label>
+      <input id="apiUrl" type="url"
+        value="https://api.openai.com/v1/chat/completions">
 
-        <div>
-          <h2>AI Settings</h2>
+      <label for="modelName">Model Name</label>
+      <input id="modelName" type="text" value="gpt-4o-mini">
 
-          <p>
-            Configure your AI connection.
-          </p>
-        </div>
-
-        <button
-          class="icon-btn"
-          type="button"
-          id="closeSettingsBtn"
-          aria-label="Close settings">
-          ✕
-        </button>
-
-      </div>
-
-      <label for="apiKey">
-        API Key
-      </label>
-
-      <input
-        id="apiKey"
-        type="password"
-        autocomplete="off"
-        placeholder="Enter your API key">
-
-      <label for="apiUrl">
-        API Endpoint
-      </label>
-
-      <input
-        id="apiUrl"
-        type="url"
-        value="https://api.openai.com/v1/chat/completions"
-        placeholder="HTTPS API endpoint">
-
-      <label for="modelName">
-        AI Model
-      </label>
-
-      <input
-        id="modelName"
-        type="text"
-        value="gpt-4o-mini"
-        placeholder="Enter supported model name">
-
-      <p class="warning">
-        Never publish your API key in public source code.
-        For production use, connect through a secure backend.
-      </p>
-
-      <div class="dialog-actions">
-
-        <button
-          type="button"
-          id="removeKeyBtn"
-          class="secondary-btn">
-          Remove Key
-        </button>
-
-        <button
-          type="submit"
-          id="saveSettingsBtn"
-          class="send-btn">
-          Save Settings
-        </button>
-
-      </div>
-
+      <button id="saveSettingsBtn" type="submit">Save Settings</button>
+      <button id="removeKeyBtn" type="button">Remove API Key</button>
+      <button id="closeSettingsBtn" type="button">Close</button>
     </form>
-
   </dialog>
 
-  <!-- JAVASCRIPT -->
-  <script src="script.js"></script>
+  <script src="./script.js"></script>
 
+  <!-- API onboarding integration -->
+  <script>
+    (() => {
+      const setup = document.getElementById("apiSetupScreen");
+      const setupForm = document.getElementById("firstApiSetupForm");
+      const keyInput = document.getElementById("firstApiKey");
+      const urlInput = document.getElementById("firstApiUrl");
+      const modelInput = document.getElementById("firstModel");
+      const error = document.getElementById("apiSetupError");
+      const appMain = document.getElementById("appMain");
+
+      function showCorrectScreen() {
+        const savedKey = localStorage.getItem("jarvis_api_key");
+
+        if (savedKey && savedKey.trim()) {
+          setup.classList.remove("active");
+          appMain.hidden = false;
+        } else {
+          setup.classList.add("active");
+          appMain.hidden = true;
+        }
+      }
+
+      setupForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+
+        const key = keyInput.value.trim();
+        const url = urlInput.value.trim();
+        const model = modelInput.value.trim();
+
+        if (!key || !url || !model) {
+          error.textContent = "API Key, URL, Model అన్నీ ఇవ్వాలి.";
+          return;
+        }
+
+        let parsedUrl;
+        try {
+          parsedUrl = new URL(url);
+        } catch {
+          error.textContent = "సరైన API URL ఇవ్వు.";
+          return;
+        }
+
+        if (parsedUrl.protocol !== "https:") {
+          error.textContent = "భద్రత కోసం HTTPS API URL ఉపయోగించు.";
+          return;
+        }
+
+        localStorage.setItem("jarvis_api_key", key);
+        localStorage.setItem("jarvis_api_url", url);
+        localStorage.setItem("jarvis_model", model);
+
+        error.textContent = "";
+        showCorrectScreen();
+
+        // Sync the existing settings inputs, if available.
+        const existingKey = document.getElementById("apiKey");
+        const existingUrl = document.getElementById("apiUrl");
+        const existingModel = document.getElementById("modelName");
+
+        if (existingKey) existingKey.value = key;
+        if (existingUrl) existingUrl.value = url;
+        if (existingModel) existingModel.value = model;
+      });
+
+      showCorrectScreen();
+    })();
+  </script>
 </body>
 </html>
