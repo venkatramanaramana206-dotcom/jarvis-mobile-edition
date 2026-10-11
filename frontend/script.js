@@ -1035,3 +1035,10 @@ if (document.readyState === "loading") {
 } else {
   init();
 }
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js")
+      .then(() => console.log("J.A.R.V.I.S Service Worker registered"))
+      .catch((error) => console.error("Service Worker error:", error));
+  });
+}
