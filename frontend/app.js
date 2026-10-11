@@ -1,4 +1,4 @@
-import { routeCommand } from "./commands.js";
+ import { routeCommand } from "./commands.js";
 import { loadWeather, weatherByCity, weatherByLocation } from "./weather.js";
 import { loadNews } from "./news.js";
 import {
