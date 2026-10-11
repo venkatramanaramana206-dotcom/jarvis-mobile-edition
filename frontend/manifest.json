@@ -1,20 +1,25 @@
- 
+
 {
-  "id": "./",
-  "name": "J.A.R.V.I.S. Personal AI Assistant",
+  "id": "../index.html",
+  "name": "JARVIS AI - Personal Assistant",
   "short_name": "JARVIS",
-  "description": "A futuristic personal AI assistant with voice interaction.",
+  "description": "A futuristic AI voice assistant inspired by JARVIS.",
   "lang": "en",
-  "dir": "auto",
-  "start_url": "./index.html",
-  "scope": "./",
+  "dir": "ltr",
+  "start_url": "../index.html",
+  "scope": "../",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait",
-  "background_color": "#05080e",
-  "theme_color": "#050b14",
+  "background_color": "#020812",
+  "theme_color": "#020812",
   "categories": [
     "productivity",
     "utilities"
   ],
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "icons": []
 }
