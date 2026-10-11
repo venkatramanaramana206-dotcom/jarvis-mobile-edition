@@ -1,14 +1,19 @@
  
 "use strict";
 
-/* =========================================================
-   J.A.R.V.I.S. — PERSONAL AI ASSISTANT
-   PART 1 OF 2 — CORE, API, HISTORY, CHAT
-   Compatible with the supplied index.html
-   ========================================================= */
+/* =========================================
+   J.A.R.V.I.S — Main JavaScript
+   API key save/load + Gemini + UI features
+   ========================================= */
+
+const $ = (id) => document.getElementById(id);
 
 const JARVIS = {
-  version: "1.2.0",
+  model: "gemini-2.5-flash",
+  models: [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash"
+  ],
   keys: {
     api: "jarvis_key",
     memory: "jarvis_memory",
@@ -17,19 +22,24 @@ const JARVIS = {
     theme: "jarvis_theme",
     language: "jarvis_language",
     voice: "jarvis_voice_replies"
-  },
-  model: "gemini-3.8-flash",
-  maxHistory: 30,
-  maxMessages: 120,
-  maxMessageLength: 10000
+  }
 };
 
-const $ = id => document.getElementById(id);
+let activeConversation = null;
+let conversations = [];
+let pendingImage = null;
+let recognition = null;
+let isListening = false;
+let isBusy = false;
+let timerHandle = null;
+let currentUtterance = null;
 
-function safeGet(key, fallback = "") {
+function safeGet(key, fallback = null) {
   try {
-    return localStorage.getItem(key) ?? fallback;
-  } catch {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value;
+  } catch (error) {
+    console.error("Storage read error:", error);
     return fallback;
   }
 }
@@ -37,58 +47,81 @@ function safeGet(key, fallback = "") {
 function safeSet(key, value) {
   try {
     localStorage.setItem(key, value);
-    return true;
-  } catch {
-    toast("Unable to save data. Check browser storage.");
+    return localStorage.getItem(key) === String(value);
+  } catch (error) {
+    console.error("Storage write error:", error);
+    toast("Unable to save. Check browser storage settings.");
     return false;
   }
 }
 
-function readJSON(key, fallback) {
+function safeJSON(key, fallback) {
   try {
-    const value = safeGet(key, "");
-    return value ? JSON.parse(value) : fallback;
+    return JSON.parse(safeGet(key, JSON.stringify(fallback)));
   } catch {
     return fallback;
   }
 }
 
 function toast(message) {
-  const container = $("toast-container");
+  console.log("[JARVIS]", message);
 
-  if (!container) {
-    console.log(message);
-    return;
+  let el = $("jarvis-toast");
+
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "jarvis-toast";
+    Object.assign(el.style, {
+      position: "fixed",
+      bottom: "22px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: "99999",
+      maxWidth: "90%",
+      padding: "12px 18px",
+      borderRadius: "10px",
+      background: "#151a24",
+      color: "#ffffff",
+      border: "1px solid #79c9ff",
+      boxShadow: "0 0 18px #79c9ff33",
+      fontSize: "14px",
+      textAlign: "center"
+    });
+    document.body.appendChild(el);
   }
 
-  const item = document.createElement("div");
-  item.className = "toast-message";
-  item.textContent = String(message);
-  container.appendChild(item);
+  el.textContent = message;
+  el.style.display = "block";
 
-  setTimeout(() => item.remove(), 3500);
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => {
+    el.style.display = "none";
+  }, 3500);
 }
 
-function setStatus(message, state = "ready") {
-  if ($("thinking-status")) {
-    $("thinking-status").textContent = message;
+function setStatus(message, type = "ready") {
+  const status = $("system-status");
+  const dot = $("status-dot");
+
+  if (status) status.textContent = message;
+
+  if (dot) {
+    dot.style.background =
+      type === "error" ? "#ff5252" :
+      type === "busy" ? "#ffc857" : "#54e39b";
   }
 
-  if ($("system-status")) {
-    $("system-status").textContent =
-      state === "error" ? "SYSTEM ERROR" :
-      state === "busy" ? "PROCESSING" : "SYSTEM ONLINE";
-  }
-
-  if ($("status-dot")) {
-    $("status-dot").style.background =
-      state === "error" ? "#ff6178" :
-      state === "busy" ? "#ffce65" : "#22f59b";
+  const thinking = $("thinking-status");
+  if (thinking) {
+    thinking.textContent = type === "busy" ? message : "";
   }
 }
 
 function setBusy(value) {
-  if ($("send-btn")) $("send-btn").disabled = value;
+  isBusy = value;
+
+  const button = $("send-btn");
+  if (button) button.disabled = value;
 
   setStatus(
     value ? "J.A.R.V.I.S is thinking..." : "Ready to assist you.",
@@ -96,115 +129,287 @@ function setBusy(value) {
   );
 }
 
-function makeId() {
-  return Date.now().toString(36) +
-    Math.random().toString(36).slice(2, 8);
+function getApiKey() {
+  return safeGet(JARVIS.keys.api, "") || "";
 }
 
-/* -------------------- CONVERSATIONS -------------------- */
+/* =========================================
+   GEMINI API KEY: LOAD / SAVE / TEST
+   ========================================= */
 
-let conversations = readJSON(JARVIS.keys.history, []);
+function loadApiKey() {
+  const key = getApiKey();
+  const input = $("api-key-input");
 
-if (!Array.isArray(conversations)) conversations = [];
+  if (input && key) input.value = key;
 
-conversations = conversations
-  .filter(c => c && typeof c.id === "string" &&
-    Array.isArray(c.messages))
-  .slice(0, JARVIS.maxHistory);
-
-let activeId = safeGet(JARVIS.keys.active, "");
-let activeConversation = conversations.find(c => c.id === activeId);
-
-if (!activeConversation) {
-  activeConversation = {
-    id: makeId(),
-    title: "New conversation",
-    createdAt: Date.now(),
-    messages: []
-  };
-
-  conversations.unshift(activeConversation);
-  activeId = activeConversation.id;
+  return key;
 }
+
+async function requestGemini(contents, apiKey, maxOutputTokens = 1024) {
+  if (!apiKey) {
+    throw new Error("Enter your Gemini API key in Settings.");
+  }
+
+  let lastError;
+
+  for (const model of JARVIS.models) {
+    try {
+      const response = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/" +
+          encodeURIComponent(model) +
+          ":generateContent",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey
+          },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{
+                text:
+                  "You are J.A.R.V.I.S, a helpful personal AI assistant. " +
+                  "Reply clearly and politely. If the user writes Telugu, " +
+                  "respond in Telugu unless asked otherwise."
+              }]
+            },
+            contents,
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens
+            }
+          })
+        }
+      );
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const detail =
+          data?.error?.message ||
+          `HTTP ${response.status}`;
+
+        // Try the next configured model for model availability errors.
+        if (
+          response.status === 404 ||
+          (response.status === 400 &&
+            /model|not found|not supported/i.test(detail))
+        ) {
+          lastError = new Error(detail);
+          continue;
+        }
+
+        throw new Error(detail);
+      }
+
+      const answer = data?.candidates?.[0]?.content?.parts
+        ?.map(part => part.text || "")
+        .join("")
+        .trim();
+
+      if (!answer) {
+        throw new Error(
+          data?.promptFeedback?.blockReason
+            ? "The request was blocked: " + data.promptFeedback.blockReason
+            : "Gemini returned an empty response."
+        );
+      }
+
+      JARVIS.model = model;
+      return answer;
+    } catch (error) {
+      lastError = error;
+
+      if (
+        error instanceof TypeError ||
+        /failed to fetch|network/i.test(error.message || "")
+      ) {
+        throw new Error(
+          "Network error. Check your internet connection and try again."
+        );
+      }
+
+      if (
+        !/404|model|not found|not supported/i.test(error.message || "")
+      ) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(
+    "No configured Gemini model is available for this API key. " +
+    (lastError?.message || "Check the model name and API key permissions.")
+  );
+}
+
+async function saveSettings() {
+  const input = $("api-key-input");
+  const button = $("save-api-key-btn");
+
+  if (!input) {
+    toast("API key input field was not found. Check your HTML ID.");
+    return;
+  }
+
+  const key = input.value.trim();
+
+  if (!key) {
+    toast("Please enter your Gemini API key.");
+    input.focus();
+    return;
+  }
+
+  if (/\s/.test(key)) {
+    toast("The API key contains spaces. Please check it.");
+    input.focus();
+    return;
+  }
+
+  if (button) button.disabled = true;
+
+  try {
+    // Save first so the user's key isn't lost if the test fails.
+    if (!safeSet(JARVIS.keys.api, key)) {
+      throw new Error("The browser could not save the API key.");
+    }
+
+    toast("API key saved. Testing Gemini connection...");
+
+    await requestGemini(
+      [{ role: "user", parts: [{ text: "Reply with OK." }] }],
+      key,
+      32
+    );
+
+    toast("Gemini connected successfully!");
+    setStatus("Connected to Gemini.");
+
+    const panel = $("settings-panel");
+    if (panel) panel.classList.remove("active", "open");
+
+    const keyPrompt = $("api-key-prompt");
+    if (keyPrompt) keyPrompt.style.display = "none";
+  } catch (error) {
+    // Keep the key saved even if the API test fails.
+    setStatus("Gemini connection failed.", "error");
+    toast("Key saved, but connection test failed: " + error.message);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function initSettings() {
+  loadApiKey();
+
+  const theme = safeGet(JARVIS.keys.theme, "dark");
+  const themeSelect = $("theme-select");
+
+  if (themeSelect) themeSelect.value = theme;
+  applyTheme(theme);
+
+  const language = safeGet(JARVIS.keys.language, "en-US");
+  const languageSelect = $("language-select");
+
+  if (languageSelect) languageSelect.value = language;
+
+  const voiceEnabled = safeGet(JARVIS.keys.voice, "true") !== "false";
+  const voiceToggle = $("voice-replies-toggle");
+
+  if (voiceToggle) voiceToggle.checked = voiceEnabled;
+
+  if (!getApiKey()) {
+    const panel = $("settings-panel");
+    if (panel) panel.classList.add("active", "open");
+
+    const input = $("api-key-input");
+    if (input) input.focus();
+
+    toast("Add your Gemini API key in Settings to enable AI chat.");
+  }
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  safeSet(JARVIS.keys.theme, theme);
+}
+
+/* =========================================
+   CONVERSATION HISTORY
+   ========================================= */
 
 function saveConversations() {
-  conversations = conversations
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, JARVIS.maxHistory);
-
   safeSet(JARVIS.keys.history, JSON.stringify(conversations));
-  safeSet(JARVIS.keys.active, activeId);
-  renderHistory();
+
+  if (activeConversation) {
+    safeSet(JARVIS.keys.active, activeConversation.id);
+  }
 }
 
 function newConversation() {
   activeConversation = {
-    id: makeId(),
+    id: String(Date.now()),
     title: "New conversation",
-    createdAt: Date.now(),
-    messages: []
+    messages: [],
+    updatedAt: Date.now()
   };
 
-  activeId = activeConversation.id;
   conversations.unshift(activeConversation);
+  conversations = conversations.slice(0, 30);
+  saveConversations();
+  renderChat();
+  renderHistory();
+}
+
+function loadConversations() {
+  const stored = safeJSON(JARVIS.keys.history, []);
+
+  conversations = Array.isArray(stored) ? stored : [];
+
+  const activeId = safeGet(JARVIS.keys.active, "");
+
+  activeConversation =
+    conversations.find(c => c.id === activeId) ||
+    conversations[0] ||
+    null;
+
+  if (!activeConversation) {
+    activeConversation = {
+      id: String(Date.now()),
+      title: "New conversation",
+      messages: [],
+      updatedAt: Date.now()
+    };
+
+    conversations = [activeConversation];
+  }
 
   saveConversations();
   renderChat();
-  closePanel("history-panel");
-  toast("New conversation created.");
+  renderHistory();
 }
 
-function renderHistory() {
-  const list = $("history-list");
-  if (!list) return;
+function addMessage(role, text, image = null) {
+  if (!activeConversation) newConversation();
 
-  list.replaceChildren();
-
-  if (!conversations.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-history";
-    empty.textContent = "No conversations yet.";
-    list.appendChild(empty);
-    return;
-  }
-
-  conversations.forEach(conversation => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "history-item";
-    button.textContent = conversation.title || "Conversation";
-
-    button.addEventListener("click", () => {
-      activeId = conversation.id;
-      activeConversation = conversation;
-
-      safeSet(JARVIS.keys.active, activeId);
-      renderChat();
-      closePanel("history-panel");
-    });
-
-    list.appendChild(button);
-  });
-}
-
-function addMessage(role, text, extra = {}) {
   const message = {
     role,
-    text: String(text),
-    time: Date.now(),
-    ...extra
+    text: String(text || ""),
+    timestamp: Date.now()
   };
 
+  if (image) message.image = image;
+
   activeConversation.messages.push(message);
-  activeConversation.messages =
-    activeConversation.messages.slice(-JARVIS.maxMessages);
+  activeConversation.updatedAt = Date.now();
 
   if (
-    role === "user" &&
-    activeConversation.title === "New conversation"
+    activeConversation.title === "New conversation" &&
+    role === "user"
   ) {
     activeConversation.title =
-      message.text.slice(0, 42) || "Image conversation";
+      String(text || "Image conversation").slice(0, 42);
   }
 
   saveConversations();
@@ -219,869 +424,610 @@ function renderChat() {
 
   chat.replaceChildren();
 
-  if (!activeConversation.messages.length) {
-    const article = document.createElement("article");
-    article.className = "message assistant-message";
+  const messages = activeConversation?.messages || [];
 
-    const heading = document.createElement("div");
-    heading.className = "message-heading";
-
-    const name = document.createElement("strong");
-    name.textContent = "JARVIS";
-
-    const time = document.createElement("time");
-    time.className = "message-time";
-    time.textContent = "Welcome";
-
-    heading.append(name, time);
+  for (const message of messages) {
+    const wrapper = document.createElement("div");
+    wrapper.className =
+      "message " + (message.role === "user" ? "user-message" : "assistant-message");
 
     const content = document.createElement("div");
     content.className = "message-content";
-    content.textContent =
-      "Hello! I'm JARVIS, your personal AI assistant. How can I help you today?";
+    content.textContent = message.text || "";
 
-    article.append(heading, content);
-    chat.appendChild(article);
-    return;
-  }
+    wrapper.appendChild(content);
 
-  activeConversation.messages.forEach(message => {
-    const article = document.createElement("article");
-    article.className =
-      "message " +
-      (message.role === "user" ? "user-message" : "assistant-message");
-
-    const heading = document.createElement("div");
-    heading.className = "message-heading";
-
-    const name = document.createElement("strong");
-    name.textContent = message.role === "user" ? "YOU" : "JARVIS";
-
-    const time = document.createElement("time");
-    time.className = "message-time";
-    time.textContent = new Date(message.time || Date.now())
-      .toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-
-    heading.append(name, time);
-
-    const content = document.createElement("div");
-    content.className = "message-content";
-    content.textContent = message.text;
-
-    article.append(heading, content);
-
-    if (message.imageData) {
+    if (message.image) {
       const image = document.createElement("img");
-      image.src = message.imageData;
-      image.alt = "User attached image";
-      image.style.cssText =
-        "max-width:100%;max-height:240px;object-fit:contain;";
-      article.appendChild(image);
+      image.src = message.image;
+      image.alt = "Uploaded image";
+      image.style.maxWidth = "100%";
+      image.style.maxHeight = "260px";
+      image.style.borderRadius = "12px";
+      wrapper.appendChild(image);
     }
 
-    chat.appendChild(article);
-  });
+    chat.appendChild(wrapper);
+  }
 
   chat.scrollTop = chat.scrollHeight;
 }
 
-/* -------------------- API KEY & GEMINI -------------------- */
+function renderHistory() {
+  const list = $("history-list");
+  if (!list) return;
 
-function getApiKey() {
-  return safeGet(JARVIS.keys.api, "").trim();
+  list.replaceChildren();
+
+  for (const conversation of conversations) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "history-item";
+    item.textContent = conversation.title || "Conversation";
+    item.addEventListener("click", () => {
+      activeConversation = conversation;
+      saveConversations();
+      renderChat();
+    });
+    list.appendChild(item);
+  }
 }
 
-async function requestGemini(contents, apiKey, maxTokens = 2048) {
-  const endpoint =
-    "https://generativelanguage.googleapis.com/v1beta/models/" +
-    encodeURIComponent(JARVIS.model) +
-    ":generateContent";
+function clearMemory() {
+  if (!confirm("Clear saved conversation history and memory?")) return;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
-
-  let response;
+  conversations = [];
+  activeConversation = null;
 
   try {
-    response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        system_instruction: {
-          parts: [{
-            text:
-              "You are J.A.R.V.I.S., a helpful personal AI assistant. " +
-              "Be clear, accurate, polite, and concise. " +
-              "Reply in Telugu when the user writes Telugu; otherwise " +
-              "use the language requested by the user. " +
-              "Never claim you performed an action unless you did."
-          }]
-        },
-        contents,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: maxTokens
-        }
-      })
-    });
+    localStorage.removeItem(JARVIS.keys.history);
+    localStorage.removeItem(JARVIS.keys.active);
+    localStorage.removeItem(JARVIS.keys.memory);
   } catch (error) {
-    if (error.name === "AbortError") {
-      throw new Error("AI request timed out. Please try again.");
-    }
-
-    throw new Error("Network error. Check your internet connection.");
-  } finally {
-    clearTimeout(timeout);
+    console.error(error);
   }
 
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const detail = data?.error?.message || "";
-
-    if (response.status === 400) {
-      throw new Error("Gemini rejected the request. " + detail);
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(
-        "API key invalid or access denied. Check your key and API access. " +
-        detail
-      );
-    }
-
-    if (response.status === 404) {
-      throw new Error(
-        "The configured Gemini model is unavailable. Check the model name " +
-        "and the models supported by your API key. " + detail
-      );
-    }
-
-    if (response.status === 429) {
-      throw new Error("API usage limit reached. Check your quota.");
-    }
-
-    throw new Error(detail || "Gemini API request failed.");
-  }
-
-  const answer = (data.candidates?.[0]?.content?.parts || [])
-    .map(part => part.text || "")
-    .join("\n")
-    .trim();
-
-  if (!answer) {
-    throw new Error("Gemini returned no text. The response may be blocked.");
-  }
-
-  return answer;
+  newConversation();
+  toast("Conversation history cleared.");
 }
 
-async function askGemini(prompt, imageData = null) {
-  const apiKey = getApiKey();
+/* =========================================
+   CHAT AND IMAGE REQUESTS
+   ========================================= */
 
-  if (!apiKey) {
-    openPanel("settings-panel");
-    $("api-key-input")?.focus();
-    throw new Error("Enter and save your Gemini API key in Settings.");
+function imageToGeminiPart(dataUrl) {
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+
+  if (!match) {
+    throw new Error("Unsupported image format.");
   }
 
-  const contents = [];
-
-  activeConversation.messages.slice(-20).forEach(message => {
-    if (message.role !== "user" && message.role !== "assistant") return;
-
-    const parts = [{ text: message.text || " " }];
-
-    if (message.role === "user" && message.imageData) {
-      const parsed = parseImageData(message.imageData);
-
-      if (parsed) {
-        parts.push({
-          inline_data: {
-            mime_type: parsed.mime,
-            data: parsed.data
-          }
-        });
-      }
+  return {
+    inlineData: {
+      mimeType: match[1],
+      data: match[2]
     }
+  };
+}
 
-    contents.push({
-      role: message.role === "assistant" ? "model" : "user",
-      parts
-    });
-  });
+async function askGemini(userText, imageData = null) {
+  const key = getApiKey();
 
-  if (!contents.length) {
-    const parts = [{ text: prompt || "Hello" }];
-    const parsed = parseImageData(imageData);
-
-    if (parsed) {
-      parts.push({
-        inline_data: {
-          mime_type: parsed.mime,
-          data: parsed.data
-        }
-      });
-    }
-
-    contents.push({ role: "user", parts });
+  if (!key) {
+    toast("Enter and save your Gemini API key in Settings first.");
+    const panel = $("settings-panel");
+    if (panel) panel.classList.add("active", "open");
+    return;
   }
 
-  return requestGemini(contents, apiKey);
+  const history = (activeConversation?.messages || [])
+    .slice(-20)
+    .filter(m => m.role === "user" || m.role === "assistant")
+    .map(m => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.text || "" }]
+    }))
+    .filter(m => m.parts[0].text);
+
+  const currentParts = [];
+
+  if (userText) currentParts.push({ text: userText });
+
+  if (imageData) {
+    currentParts.push(imageToGeminiPart(imageData));
+  }
+
+  if (!currentParts.length) {
+    currentParts.push({ text: "Please describe this image." });
+  }
+
+  // The latest user message was already saved to conversation history.
+  // Replace its text-only version with the image part when needed.
+  if (imageData && history.length) {
+    const last = history[history.length - 1];
+    if (last.role === "user" && last.parts[0]?.text === userText) {
+      history.pop();
+    }
+  }
+
+  history.push({ role: "user", parts: currentParts });
+
+  return requestGemini(history, key);
 }
 
-function parseImageData(dataUrl) {
-  if (typeof dataUrl !== "string") return null;
-
-  const match = dataUrl.match(
-    /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/
-  );
-
-  if (!match) return null;
-
-  return { mime: match[1], data: match[2] };
-}
-/* =========================================================
-   PART 2 OF 2 — COMMANDS, VOICE, SETTINGS, INITIALIZATION
-   Paste immediately after Part 1.
-   ========================================================= */
-
-/* -------------------- SEND MESSAGE -------------------- */
-
-let selectedImage = null;
-let requestInProgress = false;
-
-async function sendMessage(textOverride = null) {
-  if (requestInProgress) return;
+async function sendMessage() {
+  if (isBusy) return;
 
   const input = $("message-input");
-  const text = String(
-    textOverride !== null ? textOverride : input?.value || ""
-  ).trim();
+  const text = input ? input.value.trim() : "";
 
-  if (!text && !selectedImage) {
-    toast("Type a message or attach an image.");
-    return;
-  }
+  if (!text && !pendingImage) return;
 
-  if (text.length > JARVIS.maxMessageLength) {
-    toast("Message is too long.");
-    return;
-  }
-
-  if (!getApiKey()) {
-    openPanel("settings-panel");
-    $("api-key-input")?.focus();
-    toast("Enter your Gemini API key to continue.");
-    return;
-  }
-
-  const imageForRequest = selectedImage;
+  const image = pendingImage;
 
   if (input) input.value = "";
 
-  selectedImage = null;
-  updateImagePreview();
+  pendingImage = null;
 
-  addMessage("user", text || "Please describe this image.", {
-    imageData: imageForRequest || undefined
-  });
+  const previewContainer = $("image-preview-container");
+  if (previewContainer) previewContainer.style.display = "none";
 
-  requestInProgress = true;
+  addMessage("user", text || "Please analyze this image.", image);
+
+  if (await handleCommand(text)) return;
+
   setBusy(true);
 
   try {
-    const result = await handleCommand(text);
-
-    if (result.handled) {
-      if (result.reply) {
-        addMessage("assistant", result.reply);
-        speak(result.reply);
-      }
-      return;
-    }
-
-    const reply = await askGemini(
-      text || "Describe the attached image.",
-      imageForRequest
+    const answer = await askGemini(
+      text || "Please analyze this image.",
+      image
     );
 
-    addMessage("assistant", reply);
-    speak(reply);
+    if (answer) {
+      addMessage("assistant", answer);
+      speak(answer);
+    }
   } catch (error) {
-    const message = error?.message || "Unexpected AI error.";
-    addMessage("assistant", "Sorry, Boss. " + message);
-    setStatus("Request failed.", "error");
-    toast(message);
+    console.error("Gemini error:", error);
+    addMessage("assistant", "Sorry, I couldn't complete that request. " + error.message);
+    toast(error.message || "Request failed.");
   } finally {
-    requestInProgress = false;
     setBusy(false);
   }
 }
 
-/* -------------------- COMMANDS / TOOLS -------------------- */
+/* =========================================
+   COMMANDS
+   ========================================= */
 
 async function handleCommand(rawText) {
-  const text = String(rawText || "").trim();
-  const lower = text.toLowerCase();
+  const text = String(rawText || "").trim().toLowerCase();
+  if (!text) return false;
 
-  if (!text) return { handled: false };
-
-  if (
-    /^(what is the )?time( now)?\??$/.test(lower) ||
-    /సమయం ఎంత|ఇప్పుడు టైమ్|టైమ్ ఎంత/.test(lower)
-  ) {
-    return {
-      handled: true,
-      reply: "Current device time: " +
-        new Date().toLocaleTimeString(getLanguage(), {
-          hour: "2-digit",
-          minute: "2-digit"
-        })
-    };
+  if (/^(hi|hello|hey jarvis|హాయ్|హలో)$/.test(text)) {
+    addMessage("assistant", "Hello! I am J.A.R.V.I.S. How can I help you?");
+    return true;
   }
 
-  if (
-    /^(what is )?today'?s date\??$/.test(lower) ||
-    /ఈ రోజు తేదీ|నేటి తేదీ/.test(lower)
-  ) {
-    return {
-      handled: true,
-      reply: new Date().toLocaleDateString(getLanguage(), {
-        weekday: "long",
-        year: "numeric",
+  if (/\b(time|current time|what time)\b/.test(text) ||
+      /సమయం ఎంత/.test(text)) {
+    addMessage("assistant", "Current time: " +
+      new Intl.DateTimeFormat("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZone: "Asia/Kolkata"
+      }).format(new Date()) + " (India)");
+    return true;
+  }
+
+  if (/\b(today's date|what date|current date)\b/.test(text) ||
+      /ఈరోజు తేదీ/.test(text)) {
+    addMessage("assistant", "Today's date: " +
+      new Intl.DateTimeFormat("en-IN", {
+        day: "numeric",
         month: "long",
-        day: "numeric"
-      })
-    };
+        year: "numeric",
+        timeZone: "Asia/Kolkata"
+      }).format(new Date()));
+    return true;
   }
 
-  if (/^(tell me a )?joke\??$/.test(lower) ||
-      /జోక్ చెప్పు|ఒక జోక్/.test(lower)) {
+  if (/\b(joke|tell me a joke)\b/.test(text) || /జోక్/.test(text)) {
     const jokes = [
       "Why did the computer go to the doctor? It had a virus!",
-      "Why do programmers prefer dark mode? Because light attracts bugs!",
-      "Why did the phone wear glasses? It lost its contacts!"
+      "Why was the math book sad? It had too many problems.",
+      "Why do programmers prefer dark mode? Because light attracts bugs!"
     ];
-
-    return {
-      handled: true,
-      reply: jokes[Math.floor(Math.random() * jokes.length)]
-    };
+    addMessage("assistant", jokes[Math.floor(Math.random() * jokes.length)]);
+    return true;
   }
 
-  if (/^(flip|toss) a coin$/.test(lower) ||
-      /కాయిన్ టాస్|నాణెం వేయి/.test(lower)) {
-    return {
-      handled: true,
-      reply: Math.random() < 0.5 ? "Heads!" : "Tails!"
-    };
+  if (/\b(flip a coin|coin toss|toss a coin)\b/.test(text) ||
+      /కాయిన్ టాస్/.test(text)) {
+    addMessage("assistant", Math.random() < 0.5 ? "Heads!" : "Tails!");
+    return true;
   }
 
-  if (/^(roll|throw) (a )?dice$/.test(lower) ||
-      /డైస్ వేయి|పాచిక వేయి/.test(lower)) {
-    return {
-      handled: true,
-      reply: "You rolled: " + (1 + Math.floor(Math.random() * 6))
-    };
+  if (/\b(roll a dice|roll dice|dice roll)\b/.test(text) ||
+      /డైస్ వేయి/.test(text)) {
+    addMessage("assistant", "You rolled: " + (1 + Math.floor(Math.random() * 6)));
+    return true;
   }
 
-  const timerMatch = lower.match(
-    /(?:set |start )?timer (?:for )?(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)/
+  const timerMatch = text.match(
+    /(?:set\s+)?timer(?:\s+for)?\s+(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)/
   );
 
   if (timerMatch) {
     const amount = Number(timerMatch[1]);
     const unit = timerMatch[2];
-    const factor = /^h/.test(unit) ? 3600 : /^m/.test(unit) ? 60 : 1;
-    const seconds = amount * factor;
 
-    if (!Number.isFinite(seconds) || seconds < 1 || seconds > 86400) {
-      return {
-        handled: true,
-        reply: "Choose a timer between 1 second and 24 hours."
-      };
-    }
+    const multiplier =
+      unit.startsWith("hour") || unit.startsWith("hr") ? 3600000 :
+      unit.startsWith("min") ? 60000 : 1000;
 
-    setTimeout(() => {
-      toast("Timer finished!");
-      speak("Your timer is finished.");
-    }, seconds * 1000);
+    const duration = amount * multiplier;
 
-    return {
-      handled: true,
-      reply: "Timer started for " + amount + " " + unit + "."
-    };
+    if (timerHandle) clearTimeout(timerHandle);
+
+    addMessage("assistant", `Timer set for ${amount} ${unit}.`);
+
+    timerHandle = setTimeout(() => {
+      toast("Timer complete!");
+      addMessage("assistant", "Your timer is complete!");
+      speak("Your timer is complete.");
+      timerHandle = null;
+    }, duration);
+
+    return true;
   }
 
-  const weatherMatch = lower.match(
-    /^(?:weather|check weather)(?: in)?\s+(.+)$/
-  );
+  if (/\b(open\s+)?youtube\b/.test(text) ||
+      /\b(play|search)\b.*\b(song|music|youtube)\b/.test(text)) {
+    const query = text
+      .replace(/\b(open|play|search|on|youtube|song|music)\b/g, "")
+      .trim();
 
-  if (weatherMatch) {
-    try {
-      const city = weatherMatch[1].trim();
-      const geoUrl =
-        "https://geocoding-api.open-meteo.com/v1/search?name=" +
-        encodeURIComponent(city) + "&count=1&language=en&format=json";
-
-      const geoResponse = await fetch(geoUrl);
-      if (!geoResponse.ok) throw new Error("Geocoding failed.");
-
-      const geo = await geoResponse.json();
-      const place = geo.results?.[0];
-
-      if (!place) {
-        return { handled: true, reply: "I couldn't find that city." };
-      }
-
-      const weatherUrl =
-        "https://api.open-meteo.com/v1/forecast?latitude=" +
-        place.latitude + "&longitude=" + place.longitude +
-        "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m";
-
-      const weatherResponse = await fetch(weatherUrl);
-      if (!weatherResponse.ok) throw new Error("Weather request failed.");
-
-      const weather = await weatherResponse.json();
-      const current = weather.current;
-
-      return {
-        handled: true,
-        reply: "Weather in " + place.name + ": " +
-          current.temperature_2m + "°C, feels like " +
-          current.apparent_temperature + "°C, humidity " +
-          current.relative_humidity_2m + "%, wind " +
-          current.wind_speed_10m + " km/h."
-      };
-    } catch {
-      return {
-        handled: true,
-        reply: "Weather lookup failed. Check your internet connection."
-      };
-    }
-  }
-
-  const youtubeMatch = text.match(
-    /^(?:play|search|open)\s+(?:on\s+)?youtube\s+(.+)$/i
-  );
-
-  if (youtubeMatch) {
-    const url = "https://www.youtube.com/results?search_query=" +
-      encodeURIComponent(youtubeMatch[1]);
+    const url = query
+      ? "https://www.youtube.com/results?search_query=" + encodeURIComponent(query)
+      : "https://www.youtube.com/";
 
     window.open(url, "_blank", "noopener,noreferrer");
-
-    return {
-      handled: true,
-      reply: "Opening YouTube results for " + youtubeMatch[1] + "."
-    };
+    addMessage("assistant", "Opening YouTube" + (query ? " search for: " + query : "") + ".");
+    return true;
   }
 
-  const googleMatch = text.match(
-    /^(?:search|google)\s+(?:for\s+)?(.+)$/i
-  );
+  if (/^(open|search|google)\b/.test(text)) {
+    const query = text
+      .replace(/^(open|search|google)\s*/i, "")
+      .trim();
 
-  if (googleMatch) {
-    window.open(
-      "https://www.google.com/search?q=" +
-        encodeURIComponent(googleMatch[1]),
-      "_blank",
-      "noopener,noreferrer"
+    if (query) {
+      window.open(
+        "https://www.google.com/search?q=" + encodeURIComponent(query),
+        "_blank",
+        "noopener,noreferrer"
+      );
+      addMessage("assistant", "Searching Google for: " + query);
+      return true;
+    }
+  }
+
+  if (/\b(weather|temperature)\b/.test(text) ||
+      /వాతావరణం/.test(text)) {
+    const placeMatch = rawText.match(
+      /(?:weather|temperature|వాతావరణం)(?:\s+(?:in|at|for))?\s+(.+)/i
     );
 
-    return {
-      handled: true,
-      reply: "Opening Google search results for " + googleMatch[1] + "."
-    };
+    const place = placeMatch?.[1]?.trim();
+
+    if (!place) {
+      addMessage("assistant", "Please specify a city, for example: weather in Tirupati.");
+      return true;
+    }
+
+    try {
+      const geoResponse = await fetch(
+        "https://geocoding-api.open-meteo.com/v1/search?name=" +
+        encodeURIComponent(place) + "&count=1&language=en&format=json"
+      );
+
+      if (!geoResponse.ok) throw new Error("Weather location lookup failed.");
+
+      const geo = await geoResponse.json();
+      const location = geo.results?.[0];
+
+      if (!location) {
+        addMessage("assistant", "I couldn't find that city. Please check its spelling.");
+        return true;
+      }
+
+      const weatherResponse = await fetch(
+        "https://api.open-meteo.com/v1/forecast?latitude=" +
+        location.latitude + "&longitude=" + location.longitude +
+        "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m"
+      );
+
+      if (!weatherResponse.ok) throw new Error("Weather service unavailable.");
+
+      const weather = (await weatherResponse.json()).current;
+
+      addMessage(
+        "assistant",
+        `Weather in ${location.name}: ${weather.temperature_2m}°C, ` +
+        `feels like ${weather.apparent_temperature}°C. ` +
+        `Humidity: ${weather.relative_humidity_2m}%. ` +
+        `Wind: ${weather.wind_speed_10m} km/h.`
+      );
+    } catch (error) {
+      addMessage("assistant", "Unable to get weather right now: " + error.message);
+    }
+
+    return true;
   }
 
-  if (/^(open )?settings$/.test(lower)) {
-    openPanel("settings-panel");
-    return { handled: true, reply: "Settings opened." };
+  if (/\b(settings|open settings)\b/.test(text) || /సెట్టింగ్స్/.test(text)) {
+    const panel = $("settings-panel");
+    if (panel) panel.classList.add("active", "open");
+    addMessage("assistant", "Settings opened.");
+    return true;
   }
 
-  if (/^(open )?history$/.test(lower)) {
-    openPanel("history-panel");
-    return { handled: true, reply: "Conversation history opened." };
+  if (/\b(new chat|new conversation)\b/.test(text)) {
+    newConversation();
+    addMessage("assistant", "Started a new conversation.");
+    return true;
   }
 
-  return { handled: false };
+  return false;
 }
 
-/* -------------------- SPEECH INPUT -------------------- */
+/* =========================================
+   VOICE INPUT / TEXT TO SPEECH
+   ========================================= */
 
-const SpeechRecognitionAPI =
-  window.SpeechRecognition || window.webkitSpeechRecognition;
+function startVoiceInput() {
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
 
-let recognition = null;
-let isListening = false;
-
-function getLanguage() {
-  return $("language-select")?.value ||
-    safeGet(JARVIS.keys.language, "te-IN");
-}
-
-function stopListening() {
-  if (recognition) {
-    try { recognition.stop(); } catch {}
-  }
-
-  isListening = false;
-  $("mic-btn")?.setAttribute("aria-pressed", "false");
-  setStatus("Ready to assist you.");
-}
-
-function startListening() {
-  if (!SpeechRecognitionAPI) {
-    toast("Speech recognition is unavailable in this browser.");
+  if (!SpeechRecognition) {
+    toast("Voice input is not supported by this browser.");
     return;
   }
 
-  if (isListening) {
-    stopListening();
+  if (isListening && recognition) {
+    recognition.stop();
     return;
   }
 
-  recognition = new SpeechRecognitionAPI();
-  recognition.lang = getLanguage();
+  recognition = new SpeechRecognition();
+  recognition.lang = $("language-select")?.value || "en-IN";
+  recognition.interimResults = false;
   recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
     isListening = true;
-    $("mic-btn")?.setAttribute("aria-pressed", "true");
-    setStatus("Listening... Speak now.", "busy");
+    toast("Listening...");
   };
 
-  recognition.onresult = event => {
-    let finalText = "";
-    let interimText = "";
-
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const result = event.results[i];
-
-      if (result.isFinal) finalText += result[0].transcript;
-      else interimText += result[0].transcript;
-    }
-
+  recognition.onresult = (event) => {
+    const transcript = event.results?.[0]?.[0]?.transcript || "";
     const input = $("message-input");
 
-    if (input && interimText) input.value = interimText;
-
-    if (finalText.trim()) {
-      if (input) input.value = finalText.trim();
-      stopListening();
-      sendMessage(finalText.trim());
+    if (input) {
+      input.value = transcript;
+      input.focus();
     }
+
+    sendMessage();
   };
 
-  recognition.onerror = event => {
-    isListening = false;
-    $("mic-btn")?.setAttribute("aria-pressed", "false");
-
-    const messages = {
-      "not-allowed": "Microphone permission denied.",
-      "no-speech": "No speech detected. Try again.",
-      "network": "Speech recognition network error.",
-      "audio-capture": "No microphone found."
-    };
-
-    toast(messages[event.error] || "Voice error: " + event.error);
-    setStatus("Voice input unavailable.", "error");
+  recognition.onerror = (event) => {
+    toast("Voice input error: " + (event.error || "unknown error"));
   };
 
   recognition.onend = () => {
     isListening = false;
-    $("mic-btn")?.setAttribute("aria-pressed", "false");
   };
 
-  try {
-    recognition.start();
-  } catch {
-    isListening = false;
-    toast("Could not start voice recognition. Try again.");
-  }
+  recognition.start();
 }
 
-/* -------------------- TEXT TO SPEECH -------------------- */
-
 function speak(text) {
-  if (!("speechSynthesis" in window)) return;
-
-  if ($("voice-replies-toggle")?.checked === false) return;
   if (safeGet(JARVIS.keys.voice, "true") === "false") return;
+  if (!("speechSynthesis" in window)) return;
 
   window.speechSynthesis.cancel();
 
-  const utterance = new SpeechSynthesisUtterance(String(text).slice(0, 5000));
-  utterance.lang = getLanguage();
-  utterance.rate = 1;
-  utterance.pitch = 1;
-  utterance.volume = 1;
+  currentUtterance = new SpeechSynthesisUtterance(String(text || ""));
+  currentUtterance.lang = $("language-select")?.value || "en-IN";
+  currentUtterance.rate = 1;
+  currentUtterance.pitch = 1;
 
-  window.speechSynthesis.speak(utterance);
+  window.speechSynthesis.speak(currentUtterance);
 }
 
-function speakLastAnswer() {
-  const answer = [...activeConversation.messages]
-    .reverse()
-    .find(message => message.role === "assistant");
+function stopVoice() {
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
 
-  if (answer) speak(answer.text);
-  else toast("No assistant reply to read yet.");
-}
-
-/* -------------------- IMAGE UPLOAD -------------------- */
-
-function updateImagePreview() {
-  const container = $("image-preview-container");
-  const image = $("image-preview");
-
-  if (!container || !image) return;
-
-  if (!selectedImage) {
-    container.hidden = true;
-    image.removeAttribute("src");
-    return;
+  if (recognition && isListening) {
+    recognition.stop();
   }
-
-  image.src = selectedImage;
-  container.hidden = false;
 }
 
-function loadImage(file) {
+/* =========================================
+   IMAGE UPLOAD / CAMERA
+   ========================================= */
+
+function showImagePreview(dataUrl) {
+  pendingImage = dataUrl;
+
+  const image = $("image-preview");
+  const container = $("image-preview-container");
+
+  if (image) image.src = dataUrl;
+  if (container) container.style.display = "block";
+}
+
+function handleImageFile(file) {
   if (!file) return;
 
   if (!file.type.startsWith("image/")) {
-    toast("Please select an image.");
+    toast("Please select an image file.");
     return;
   }
 
-  if (file.size > 4 * 1024 * 1024) {
-    toast("Choose an image smaller than 4 MB.");
+  if (file.size > 8 * 1024 * 1024) {
+    toast("Image is too large. Please choose an image under 8 MB.");
     return;
   }
 
   const reader = new FileReader();
 
   reader.onload = () => {
-    selectedImage = String(reader.result);
-    updateImagePreview();
-    toast("Image attached. Type a question and send it.");
+    showImagePreview(String(reader.result));
   };
 
-  reader.onerror = () => toast("Could not read image.");
+  reader.onerror = () => toast("Could not read the selected image.");
   reader.readAsDataURL(file);
 }
 
-/* -------------------- SETTINGS / PANELS -------------------- */
+function openCamera() {
+  const input = $("img-input");
 
-function openPanel(id) {
-  const panel = $(id);
-  if (!panel) return;
-  panel.hidden = false;
+  if (input) {
+    input.accept = "image/*";
+    input.setAttribute("capture", "environment");
+    input.click();
+  } else {
+    toast("Image upload input was not found.");
+  }
 }
+
+/* =========================================
+   PANELS / EVENTS / INITIALIZATION
+   ========================================= */
 
 function closePanel(id) {
   const panel = $(id);
-  if (panel) panel.hidden = true;
+  if (panel) panel.classList.remove("active", "open");
 }
 
-function initSettings() {
-  const keyInput = $("api-key-input");
-  if (keyInput) keyInput.value = getApiKey();
+function bindEvents() {
+  // API key save button — essential fix.
+  $("save-api-key-btn")?.addEventListener("click", saveSettings);
 
-  const theme = safeGet(JARVIS.keys.theme, "dark");
-  if ($("theme-select")) $("theme-select").value = theme;
-
-  document.documentElement.dataset.theme = theme;
-
-  const language = safeGet(JARVIS.keys.language, "te-IN");
-  if ($("language-select")) $("language-select").value = language;
-
-  if ($("voice-replies-toggle")) {
-    $("voice-replies-toggle").checked =
-      safeGet(JARVIS.keys.voice, "true") !== "false";
-  }
-
-  // Use the existing Settings panel; do not create a new design.
-  if (!getApiKey()) {
-    openPanel("settings-panel");
-    if (keyInput) setTimeout(() => keyInput.focus(), 100);
-    toast("Enter your Gemini API key to start using JARVIS.");
-  }
-}
-
-function changeTheme() {
-  const theme = $("theme-select")?.value || "dark";
-  document.documentElement.dataset.theme = theme;
-  safeSet(JARVIS.keys.theme, theme);
-}
-
-function clearMemory() {
-  if (!window.confirm(
-    "Clear saved conversations and memory on this device?"
-  )) return;
-
-  conversations = [];
-
-  activeConversation = {
-    id: makeId(),
-    title: "New conversation",
-    createdAt: Date.now(),
-    messages: []
-  };
-
-  activeId = activeConversation.id;
-  conversations.push(activeConversation);
-
-  safeSet(JARVIS.keys.history, JSON.stringify(conversations));
-  safeSet(JARVIS.keys.active, activeId);
-  safeSet(JARVIS.keys.memory, "[]");
-
-  renderChat();
-  renderHistory();
-  toast("Local conversation history cleared.");
-}
-
-/* -------------------- PWA INSTALL -------------------- */
-
-function setupInstall() {
-  let deferredPrompt = null;
-  const button = $("install-btn");
-
-  if (!button) return;
-
-  window.addEventListener("beforeinstallprompt", event => {
-    event.preventDefault();
-    deferredPrompt = event;
-    button.hidden = false;
-  });
-
-  button.addEventListener("click", async () => {
-    if (!deferredPrompt) {
-      toast("Use your browser menu to install or add JARVIS to Home screen.");
-      return;
-    }
-
-    deferredPrompt.prompt();
-    const choice = await deferredPrompt.userChoice;
-
-    if (choice.outcome === "accepted") {
-      toast("Installation accepted.");
-    }
-
-    deferredPrompt = null;
-    button.hidden = true;
-  });
-
-  window.addEventListener("appinstalled", () => {
-    button.hidden = true;
-    toast("JARVIS installed successfully.");
-  });
-}
-
-/* -------------------- EVENT WIRING -------------------- */
-
-function bind(id, event, handler) {
-  const element = $(id);
-  if (element) element.addEventListener(event, handler);
-}
-
-function init() {
-  bind("chat-form", "submit", event => {
+  $("chat-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
     sendMessage();
   });
 
-  bind("mic-btn", "click", startListening);
-  bind("voice-card", "click", startListening);
-  bind("nav-voice", "click", startListening);
+  $("send-btn")?.addEventListener("click", (event) => {
+    // If the button belongs to chat-form, submit handler handles it.
+    if ($("chat-form")) return;
+    event.preventDefault();
+    sendMessage();
+  });
 
-  bind("cam-btn", "click", () => $("img-input")?.click());
-  bind("attach-btn", "click", () => $("img-input")?.click());
+  $("message-input")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage();
+    }
+  });
 
-  bind("img-input", "change", event => {
-    loadImage(event.target.files?.[0]);
+  $("mic-btn")?.addEventListener("click", startVoiceInput);
+  $("nav-voice")?.addEventListener("click", startVoiceInput);
+  $("stop-voice-btn")?.addEventListener("click", stopVoice);
+  $("read-answer-btn")?.addEventListener("click", () => {
+    const last = [...(activeConversation?.messages || [])]
+      .reverse()
+      .find(m => m.role === "assistant");
+
+    if (last) speak(last.text);
+    else toast("There is no answer to read yet.");
+  });
+
+  $("cam-btn")?.addEventListener("click", openCamera);
+
+  $("img-input")?.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    handleImageFile(file);
     event.target.value = "";
   });
 
-  bind("remove-image-btn", "click", () => {
-    selectedImage = null;
-    updateImagePreview();
+  $("image-preview-container")?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-remove-image]")) {
+      pendingImage = null;
+      const container = $("image-preview-container");
+      if (container) container.style.display = "none";
+    }
   });
 
-  bind("settings-btn", "click", () => openPanel("settings-panel"));
-  bind("nav-settings", "click", () => openPanel("settings-panel"));
-  bind("history-btn", "click", () => openPanel("history-panel"));
-  bind("nav-history", "click", () => openPanel("history-panel"));
+  $("clear-memory-btn")?.addEventListener("click", clearMemory);
+  $("new-chat-btn")?.addEventListener("click", newConversation);
 
-  bind("close-settings-btn", "click", () => closePanel("settings-panel"));
-  bind("close-history-btn", "click", () => closePanel("history-panel"));
+  $("theme-select")?.addEventListener("change", (event) => {
+    applyTheme(event.target.value);
+  });
 
-  bind("save-api-key-btn", "click", saveSettings);
-  bind("theme-select", "change", changeTheme);
-
-  bind("language-select", "change", event => {
+  $("language-select")?.addEventListener("change", (event) => {
     safeSet(JARVIS.keys.language, event.target.value);
   });
 
-  bind("voice-replies-toggle", "change", event => {
+  $("voice-replies-toggle")?.addEventListener("change", (event) => {
     safeSet(JARVIS.keys.voice, String(event.target.checked));
+    if (!event.target.checked) stopVoice();
   });
 
-  bind("clear-memory-btn", "click", clearMemory);
-  bind("new-chat-btn", "click", newConversation);
-  bind("read-answer-btn", "click", speakLastAnswer);
+  $("settings-panel")?.querySelectorAll("[data-close-panel]")
+    .forEach(button => {
+      button.addEventListener("click", () => closePanel("settings-panel"));
+    });
 
-  bind("stop-voice-btn", "click", () => {
-    stopListening();
-
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+  $("install-btn")?.addEventListener("click", async () => {
+    if (window.deferredPrompt) {
+      window.deferredPrompt.prompt();
+      await window.deferredPrompt.userChoice;
+      window.deferredPrompt = null;
+    } else {
+      toast("Install option is available only when the app meets browser install requirements.");
     }
-
-    toast("Voice stopped.");
   });
 
-  const input = $("message-input");
-
-  if (input) {
-    input.addEventListener("keydown", event => {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        $("chat-form")?.requestSubmit();
-      }
-    });
-
-    input.addEventListener("input", () => {
-      input.style.height = "auto";
-      input.style.height = Math.min(input.scrollHeight, 160) + "px";
-    });
-  }
-
-  initSettings();
-  renderChat();
-  renderHistory();
-  setupInstall();
-
-  setStatus("Ready to assist you.");
-  console.log("J.A.R.V.I.S. initialized. Version:", JARVIS.version);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closePanel("settings-panel");
+      closePanel("history-panel");
+    }
+  });
 }
 
-/* -------------------- START APPLICATION -------------------- */
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  window.deferredPrompt = event;
+});
+
+function initJarvis() {
+  initSettings();
+  loadConversations();
+  bindEvents();
+
+  setStatus("Ready to assist you.");
+
+  // If no API key exists, open Settings and focus the key field.
+  if (!getApiKey()) {
+    const panel = $("settings-panel");
+    if (panel) panel.classList.add("active", "open");
+  }
+
+  console.log("J.A.R.V.I.S initialized.");
+}
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init, { once: true });
+  document.addEventListener("DOMContentLoaded", initJarvis);
 } else {
-  init();
+  initJarvis();
 }
