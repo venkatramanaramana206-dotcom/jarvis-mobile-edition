@@ -1,419 +1,561 @@
 
-"use strict";
+(() => {
+  "use strict";
 
-/* JARVIS Voice AI — Automatic reply + speech */
+  const $ = (id) => document.getElementById(id);
 
-const $ = (id) => document.getElementById(id);
-
-const KEY = "jarvis_api_key";
-const URL_KEY = "jarvis_api_url";
-const MODEL_KEY = "jarvis_model";
-const VOICE_KEY = "jarvis_auto_voice";
-
-let listening = false;
-let processing = false;
-let recognition = null;
-let speaking = false;
-let lastAnswer = "";
-let conversation = [];
-let restartAfterSpeech = false;
-let silenceTimer = null;
-
-const apiKey = () => localStorage.getItem(KEY) || "";
-const apiUrl = () =>
-  localStorage.getItem(URL_KEY) ||
-  "https://api.openai.com/v1/chat/completions";
-const model = () =>
-  localStorage.getItem(MODEL_KEY) || "gpt-4o-mini";
-const autoVoice = () => localStorage.getItem(VOICE_KEY) !== "false";
-
-function status(text) {
-  if ($("voiceStatus")) $("voiceStatus").textContent = text;
-}
-
-function showThinking(show) {
-  if ($("typing")) $("typing").hidden = !show;
-}
-
-function safeText(text) {
-  return String(text).replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;",
-    '"': "&quot;", "'": "&#39;"
-  })[c]);
-}
-
-function displayMessage(role, text) {
-  const area = $("messages");
-  if (!area) return;
-
-  const row = document.createElement("div");
-  row.className = role === "user"
-    ? "message user-message"
-    : "message ai-message";
-
-  const heading = document.createElement("strong");
-  heading.textContent = role === "user" ? "YOU" : "JARVIS";
-
-  const content = document.createElement("div");
-  content.className = "message-content";
-  content.innerHTML = safeText(text).replace(/\n/g, "<br>");
-
-  row.append(heading, content);
-
-  if (role === "assistant") {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = " 🔊";
-    button.addEventListener("click", () => speak(text, false));
-    row.appendChild(button);
-  }
-
-  area.appendChild(row);
-  area.scrollTop = area.scrollHeight;
-}
-
-function detectLanguage(text) {
-  if (/[\u0C00-\u0C7F]/.test(text)) return "te-IN";
-  if (/[\u0900-\u097F]/.test(text)) return "hi-IN";
-  if (/[\u0B80-\u0BFF]/.test(text)) return "ta-IN";
-  if (/[\u0C80-\u0CFF]/.test(text)) return "kn-IN";
-  return "en-IN";
-}
-
-/* Voice output */
-
-function speak(text, resumeListening = false) {
-  if (!("speechSynthesis" in window)) {
-    status("ఈ బ్రౌజర్‌లో Voice Output అందుబాటులో లేదు.");
-    return;
-  }
-
-  const answer = String(text || "").trim();
-  if (!answer) return;
-
-  restartAfterSpeech = resumeListening;
-  window.speechSynthesis.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(answer);
-  utterance.lang = detectLanguage(answer);
-  utterance.rate = 0.92;
-  utterance.pitch = 1;
-  utterance.volume = 1;
-
-  const voices = window.speechSynthesis.getVoices();
-  const prefix = utterance.lang.toLowerCase().split("-")[0];
-
-  const voice = voices.find(v =>
-    v.lang.toLowerCase() === utterance.lang.toLowerCase()
-  ) || voices.find(v =>
-    v.lang.toLowerCase().startsWith(prefix)
-  );
-
-  if (voice) utterance.voice = voice;
-
-  utterance.onstart = () => {
-    speaking = true;
-    status("JARVIS మాట్లాడుతోంది...");
+  const el = {
+    messages: $("messages"),
+    form: $("chatForm"),
+    input: $("userInput"),
+    mic: $("micBtn"),
+    status: $("voiceStatus"),
+    typing: $("typing"),
+    settings: $("settingsDialog"),
+    settingsBtn: $("settingsBtn"),
+    settingsForm: $("settingsForm"),
+    apiKey: $("apiKey"),
+    apiUrl: $("apiUrl"),
+    model: $("modelName"),
+    closeSettings: $("closeSettingsBtn"),
+    removeKey: $("removeKeyBtn"),
+    saveSettings: $("saveSettingsBtn"),
+    speak: $("speakBtn"),
+    stopSpeak: $("stopSpeakBtn"),
+    clear: $("clearBtn"),
+    clock: $("clock"),
+    date: $("dateLine"),
+    toolOutput: $("toolOutput")
   };
 
-  utterance.onend = () => {
-    speaking = false;
-    status("సమాధానం పూర్తయింది.");
-
-    if (restartAfterSpeech) {
-      restartAfterSpeech = false;
-      setTimeout(startListening, 450);
-    }
+  const STORE = {
+    key: "jarvis_api_key",
+    url: "jarvis_api_url",
+    model: "jarvis_model",
+    history: "jarvis_chat_history",
+    voice: "jarvis_auto_voice"
   };
 
-  utterance.onerror = (event) => {
-    speaking = false;
-    console.error("Speech output error:", event.error);
-    status("వాయిస్ అందుబాటులో లేదు. Speak బటన్ ప్రయత్నించు.");
+  const defaults = {
+    url: "https://api.openai.com/v1/chat/completions",
+    model: "gpt-4o-mini"
   };
 
-  window.speechSynthesis.speak(utterance);
-}
+  let busy = false;
+  let recognition = null;
+  let listening = false;
+  let voiceLanguage = "te-IN";
+  let lastAnswer = "";
+  let history = [];
+  let voices = [];
 
-/* Send user message to AI */
+  const getSetting = (key, fallback = "") =>
+    localStorage.getItem(key) || fallback;
 
-async function askAI(text) {
-  const key = apiKey();
+  const setStatus = (message) => {
+    if (el.status) el.status.textContent = message;
+    const systemStatus = $("systemStatus");
+    if (systemStatus) systemStatus.textContent = message;
+  };
 
-  if (!key) {
-    status("ముందుగా Settingsలో API Key సేవ్ చేయి.");
-    return "API Key లేదు. Settings తెరిచి నీ API Key సేవ్ చేయి.";
-  }
-
-  const messages = [
-    {
-      role: "system",
-      content:
-        "You are JARVIS, a friendly personal voice assistant. " +
-        "Answer the user's actual request directly, not with generic listening messages. " +
-        "Reply in the same language the user speaks. " +
-        "For Telugu, use natural Telugu. Be concise when speaking aloud. " +
-        "Do not claim to perform real-world actions unless actually performed."
-    },
-    ...conversation.slice(-16)
-  ];
-
-  const response = await fetch(apiUrl(), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + key
-    },
-    body: JSON.stringify({
-      model: model(),
-      messages,
-      temperature: 0.6
-    })
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.error?.message || `API error ${response.status}`);
-  }
-
-  const answer = data?.choices?.[0]?.message?.content?.trim();
-  if (!answer) throw new Error("AI నుంచి సమాధానం రాలేదు.");
-
-  conversation.push(
-    { role: "user", content: text },
-    { role: "assistant", content: answer }
-  );
-
-  conversation = conversation.slice(-20);
-  return answer;
-}
-
-/* Main conversation flow */
-
-async function sendToJarvis(text, fromVoice = false) {
-  text = String(text || "").trim();
-  if (!text || processing) return;
-
-  processing = true;
-  displayMessage("user", text);
-
-  if ($("userInput")) $("userInput").value = "";
-
-  showThinking(true);
-  status("నీ ప్రశ్నకు సమాధానం తయారు చేస్తున్నాను...");
-
-  try {
-    const answer = await askAI(text);
-    lastAnswer = answer;
-
-    displayMessage("assistant", answer);
-    status("JARVIS సిద్ధంగా ఉంది.");
-
-    if (autoVoice()) {
-      // Voice conversations resume listening after the answer.
-      speak(answer, fromVoice);
-    } else if (fromVoice) {
-      startListening();
+  function updateClock() {
+    const now = new Date();
+    if (el.clock) {
+      el.clock.textContent = now.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
     }
-  } catch (error) {
-    console.error(error);
-
-    const message =
-      "క్షమించు, AIకి కనెక్ట్ కాలేకపోయాను. " +
-      "API Key, Model, Internet, API URL తనిఖీ చేయి.";
-
-    displayMessage("assistant", message);
-    status("API కనెక్షన్ సమస్య.");
-
-    // Do not repeatedly read error messages aloud.
-    if (fromVoice) {
-      setTimeout(startListening, 800);
+    if (el.date) {
+      el.date.textContent = now.toLocaleDateString([], {
+        weekday: "long",
+        month: "short",
+        day: "numeric"
+      });
     }
-  } finally {
-    processing = false;
-    showThinking(false);
-  }
-}
-
-/* Microphone input */
-
-function startListening() {
-  if (listening || processing || speaking) return;
-
-  const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
-
-  if (!SpeechRecognition) {
-    status("Voice Recognition కోసం Android Chrome ప్రయత్నించు.");
-    return;
   }
 
-  if (!recognition) {
-    recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      listening = true;
-      $("micBtn")?.classList.add("listening");
-      $("assistantOrb")?.classList.add("listening");
-      status("వింటున్నాను... ఇప్పుడు మాట్లాడు.");
-    };
-
-    recognition.onresult = (event) => {
-      const transcript =
-        event.results?.[0]?.[0]?.transcript?.trim();
-
-      if (transcript) {
-        listening = false;
-        recognition.stop();
-        sendToJarvis(transcript, true);
-      }
-    };
-
-    recognition.onerror = (event) => {
-      listening = false;
-      $("micBtn")?.classList.remove("listening");
-      $("assistantOrb")?.classList.remove("listening");
-
-      if (event.error === "not-allowed") {
-        status("Microphone permission ఇవ్వాలి.");
-      } else if (event.error === "no-speech") {
-        status("మాట వినిపించలేదు. మైక్ నొక్కి మళ్లీ మాట్లాడు.");
-      } else {
-        status("Microphone సమస్య: " + event.error);
-      }
-    };
-
-    recognition.onend = () => {
-      listening = false;
-      $("micBtn")?.classList.remove("listening");
-      $("assistantOrb")?.classList.remove("listening");
-    };
-  }
-
-  // Use Telugu recognition by default.
-  // Change this to "en-IN" if you mainly speak English.
-  recognition.lang = "te-IN";
-
-  try {
-    recognition.start();
-  } catch (error) {
-    console.warn(error);
-    status("మైక్ ప్రారంభం కాలేదు. మళ్లీ నొక్కు.");
-  }
-}
-
-function stopListening() {
-  if (recognition && listening) recognition.stop();
-  listening = false;
-}
-
-/* Wire up existing page controls */
-
-function initializeJarvisVoice() {
-  $("chatForm")?.addEventListener("submit", event => {
-    event.preventDefault();
-    sendToJarvis($("userInput")?.value || "", false);
-  });
-
-  $("micBtn")?.addEventListener("click", () => {
-    if (listening) {
-      stopListening();
-    } else {
-      startListening();
+  function scrollMessages() {
+    if (el.messages) {
+      el.messages.scrollTop = el.messages.scrollHeight;
     }
-  });
+  }
 
-  $("speakBtn")?.addEventListener("click", () => {
-    if (lastAnswer) speak(lastAnswer, false);
-    else status("ముందుగా ఒక ప్రశ్న అడుగు.");
-  });
+  function addMessage(text, who = "ai") {
+    if (!el.messages) return;
 
-  $("stopSpeakBtn")?.addEventListener("click", () => {
-    restartAfterSpeech = false;
-    window.speechSynthesis?.cancel();
-    speaking = false;
-    status("Voice ఆపబడింది.");
-  });
+    const node = document.createElement("div");
+    node.className = who === "user"
+      ? "message user-message"
+      : "message ai-message";
 
-  $("settingsBtn")?.addEventListener("click", () => {
-    const dialog = $("settingsDialog");
-    if (!dialog) return;
+    // Plain text only: do not inject API responses as HTML.
+    node.textContent = text;
+    el.messages.appendChild(node);
+    scrollMessages();
+  }
 
-    if ($("apiKey")) $("apiKey").value = apiKey();
-    if ($("apiUrl")) $("apiUrl").value = apiUrl();
-    if ($("modelName")) $("modelName").value = model();
-
-    if (dialog.showModal) {
-      if (!dialog.open) dialog.showModal();
-    } else {
-      dialog.setAttribute("open", "");
+  function setBusy(value) {
+    busy = value;
+    if (el.typing) el.typing.hidden = !value;
+    if (el.input) el.input.disabled = value;
+    if (el.form) {
+      const submit = el.form.querySelector('[type="submit"]');
+      if (submit) submit.disabled = value;
     }
-  });
+    if (value) setStatus("THINKING...");
+    else setStatus("SYSTEM READY");
+  }
 
-  $("closeSettingsBtn")?.addEventListener("click", () => {
-    const dialog = $("settingsDialog");
-    if (dialog?.close) dialog.close();
-    else dialog?.removeAttribute("open");
-  });
+  function getLanguage(text) {
+    // Detect Telugu script; otherwise use English speech.
+    return /[\u0C00-\u0C7F]/.test(text) ? "te-IN" : "en-US";
+  }
 
-  $("settingsForm")?.addEventListener("submit", event => {
-    event.preventDefault();
+  function getApiKey() {
+    return (el.apiKey?.value || getSetting(STORE.key)).trim();
+  }
 
-    const key = $("apiKey")?.value?.trim();
-    const url = $("apiUrl")?.value?.trim();
-    const modelName = $("modelName")?.value?.trim();
+  function getApiUrl() {
+    return (
+      el.apiUrl?.value ||
+      getSetting(STORE.url, defaults.url)
+    ).trim();
+  }
 
-    if (!key || !url || !modelName) {
-      alert("API Key, API URL, Model Name ఇవ్వాలి.");
+  function getModel() {
+    return (
+      el.model?.value ||
+      getSetting(STORE.model, defaults.model)
+    ).trim();
+  }
+
+  function restoreSettings() {
+    if (el.apiKey) el.apiKey.value = getSetting(STORE.key);
+    if (el.apiUrl) el.apiUrl.value = getSetting(STORE.url, defaults.url);
+    if (el.model) el.model.value = getSetting(STORE.model, defaults.model);
+  }
+
+  function saveSettings(event) {
+    if (event) event.preventDefault();
+
+    const key = (el.apiKey?.value || "").trim();
+    const url = (el.apiUrl?.value || defaults.url).trim();
+    const model = (el.model?.value || defaults.model).trim();
+
+    if (!key) {
+      alert("Please enter your API key.");
+      el.apiKey?.focus();
       return;
     }
 
     try {
-      if (new URL(url).protocol !== "https:") {
-        throw new Error("HTTPS required");
+      const parsed = new URL(url);
+      if (!["https:", "http:"].includes(parsed.protocol)) {
+        throw new Error("Invalid protocol");
       }
     } catch {
-      alert("సరైన HTTPS API URL ఇవ్వు.");
+      alert("Enter a valid API URL.");
+      el.apiUrl?.focus();
       return;
     }
 
-    localStorage.setItem(KEY, key);
-    localStorage.setItem(URL_KEY, url);
-    localStorage.setItem(MODEL_KEY, modelName);
+    localStorage.setItem(STORE.key, key);
+    localStorage.setItem(STORE.url, url);
+    localStorage.setItem(STORE.model, model);
 
-    const dialog = $("settingsDialog");
-    if (dialog?.close) dialog.close();
+    if (el.settings?.open) el.settings.close();
+    setStatus("API SETTINGS SAVED");
+    addMessage("API settings saved. You can ask me a question now.", "ai");
+  }
 
-    status("API Key సేవ్ అయింది. ఇప్పుడు మాట్లాడవచ్చు.");
-  });
+  function openSettings() {
+    restoreSettings();
 
-  $("removeKeyBtn")?.addEventListener("click", () => {
-    localStorage.removeItem(KEY);
-    status("API Key తొలగించబడింది.");
-    const dialog = $("settingsDialog");
-    if (dialog?.close) dialog.close();
-  });
+    if (el.settings?.showModal) {
+      if (!el.settings.open) el.settings.showModal();
+    } else {
+      alert("Settings dialog was not found. Check the ID settingsDialog in index.html.");
+    }
+  }
 
-  $("clearBtn")?.addEventListener("click", () => {
-    if (!confirm("Chat మొత్తం తొలగించాలా?")) return;
-    conversation = [];
-    $("messages")?.replaceChildren();
-  });
+  function chooseVoice(lang) {
+    voices = window.speechSynthesis?.getVoices?.() || [];
+    const prefix = lang.toLowerCase().split("-")[0];
 
-  // Prevent accidental duplicate listeners if this file is loaded once.
-  status(apiKey()
-    ? "JARVIS సిద్ధంగా ఉంది. మైక్ నొక్కి మాట్లాడు."
-    : "Settingsలో API Key సేవ్ చేయి.");
-}
+    return (
+      voices.find(v => v.lang.toLowerCase() === lang.toLowerCase()) ||
+      voices.find(v => v.lang.toLowerCase().startsWith(prefix)) ||
+      voices.find(v => v.default) ||
+      null
+    );
+  }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initializeJarvisVoice, {
-    once: true
-  });
-} else {
-  initializeJarvisVoice();
-}
+  function speak(text, lang = getLanguage(text)) {
+    if (!("speechSynthesis" in window) || !text) {
+      setStatus("VOICE OUTPUT UNAVAILABLE");
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    const voice = chooseVoice(lang);
+    if (voice) utterance.voice = voice;
+
+    utterance.onstart = () => setStatus("SPEAKING...");
+    utterance.onend = () => setStatus("SYSTEM READY");
+    utterance.onerror = () => setStatus("VOICE ERROR — USE READ ALOUD");
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  async function askAI(userText) {
+    const apiKey = getApiKey();
+    const apiUrl = getApiUrl();
+    const model = getModel();
+
+    if (!apiKey) {
+      openSettings();
+      throw new Error("Add your API key in Settings before chatting.");
+    }
+
+    if (!apiUrl || !model) {
+      throw new Error("Please set the API URL and model in Settings.");
+    }
+
+    const messages = [
+      {
+        role: "system",
+        content:
+          "You are JARVIS, a helpful personal AI assistant. " +
+          "Reply in the same language the user uses. If they use Telugu, " +
+          "reply naturally in Telugu. If they use English, reply in English. " +
+          "If they mix both, you may mix both. Be clear and useful. " +
+          "Never claim you performed a real-world action unless a connected " +
+          "tool actually performed it. Explain when you cannot perform an action."
+      },
+      ...history.slice(-12),
+      { role: "user", content: userText }
+    ];
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({ model, messages, temperature: 0.7 })
+    });
+
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const errorData = await response.json();
+        detail = errorData?.error?.message || "";
+      } catch {}
+
+      if (response.status === 401) {
+        throw new Error("API key is invalid. Check it in Settings.");
+      }
+      if (response.status === 429) {
+        throw new Error("API rate limit or quota reached. Check your API account.");
+      }
+      throw new Error(
+        `API request failed (${response.status}). ${detail || "Check API URL, model, and network."}`
+      );
+    }
+
+    const data = await response.json();
+    const answer = data?.choices?.[0]?.message?.content;
+
+    if (typeof answer !== "string" || !answer.trim()) {
+      throw new Error("The API returned no text. Check that your model supports chat completions.");
+    }
+
+    return answer.trim();
+  }
+
+  async function sendToJarvis(text, fromVoice = false) {
+    const userText = String(text || "").trim();
+    if (!userText || busy) return;
+
+    addMessage(userText, "user");
+    if (el.input) el.input.value = "";
+    setBusy(true);
+
+    try {
+      const answer = await askAI(userText);
+      lastAnswer = answer;
+
+      history.push(
+        { role: "user", content: userText },
+        { role: "assistant", content: answer }
+      );
+      history = history.slice(-24);
+
+      try {
+        localStorage.setItem(STORE.history, JSON.stringify(history));
+      } catch {}
+
+      addMessage(answer, "ai");
+
+      if (getSetting(STORE.voice, "true") !== "false") {
+        speak(answer, getLanguage(answer));
+      } else {
+        setStatus("SYSTEM READY");
+      }
+    } catch (error) {
+      const message = error?.message || "Something went wrong.";
+      addMessage("Sorry — " + message, "ai");
+      setStatus("CHECK SETTINGS / CONNECTION");
+    } finally {
+      setBusy(false);
+      if (fromVoice) {
+        // Do not automatically reopen the microphone: it can record
+        // the assistant's own speech on mobile devices.
+        setStatus("READY — TAP MIC TO SPEAK AGAIN");
+      }
+    }
+  }
+
+  function createLanguageButton() {
+    if (!el.mic || $("voiceLanguageBtn")) return;
+
+    const button = document.createElement("button");
+    button.id = "voiceLanguageBtn";
+    button.type = "button";
+    button.textContent = "🎙 తెలుగు";
+    button.title = "Switch speech recognition language";
+    button.style.cssText =
+      "min-height:44px;padding:8px 10px;border:1px solid rgba(84,232,255,.3);" +
+      "border-radius:12px;background:#101e32;color:#eef5ff;font-size:12px;";
+
+    button.addEventListener("click", () => {
+      voiceLanguage = voiceLanguage === "te-IN" ? "en-US" : "te-IN";
+      button.textContent = voiceLanguage === "te-IN"
+        ? "🎙 తెలుగు"
+        : "🎙 English";
+      setStatus(
+        voiceLanguage === "te-IN"
+          ? "VOICE LANGUAGE: TELUGU"
+          : "VOICE LANGUAGE: ENGLISH"
+      );
+      if (recognition && listening) {
+        recognition.stop();
+      }
+    });
+
+    el.mic.insertAdjacentElement("afterend", button);
+  }
+
+  function setupRecognition() {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setStatus("VOICE INPUT UNSUPPORTED — TYPE BELOW");
+      if (el.mic) el.mic.disabled = true;
+      return;
+    }
+
+    recognition = new SpeechRecognition();
+    recognition.lang = voiceLanguage;
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    let finalTranscript = "";
+
+    recognition.onstart = () => {
+      listening = true;
+      finalTranscript = "";
+      el.mic?.classList.add("listening");
+      el.mic?.setAttribute("aria-pressed", "true");
+      setStatus(
+        voiceLanguage === "te-IN"
+          ? "వింటున్నాను... ఇప్పుడు మాట్లాడు"
+          : "LISTENING... SPEAK NOW"
+      );
+    };
+
+    recognition.onresult = (event) => {
+      let interim = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + " ";
+        } else {
+          interim += transcript;
+        }
+      }
+
+      if (el.input) {
+        el.input.value = (finalTranscript + interim).trim();
+      }
+    };
+
+    recognition.onerror = (event) => {
+      setStatus(
+        event.error === "not-allowed"
+          ? "MICROPHONE PERMISSION DENIED"
+          : event.error === "no-speech"
+            ? "NO SPEECH DETECTED — TAP MIC TO RETRY"
+            : `VOICE INPUT ERROR: ${event.error}`
+      );
+    };
+
+    recognition.onend = () => {
+      listening = false;
+      el.mic?.classList.remove("listening");
+      el.mic?.setAttribute("aria-pressed", "false");
+
+      const transcript = (finalTranscript || el.input?.value || "").trim();
+
+      if (transcript && !busy) {
+        if (el.input) el.input.value = "";
+        sendToJarvis(transcript, true);
+      } else if (!busy) {
+        setStatus("READY — TAP MIC TO SPEAK");
+      }
+    };
+  }
+
+  function toggleMic() {
+    if (!recognition) {
+      setupRecognition();
+      if (!recognition) return;
+    }
+
+    if (busy) {
+      setStatus("PLEASE WAIT FOR THE CURRENT ANSWER");
+      return;
+    }
+
+    if (listening) {
+      recognition.stop();
+      return;
+    }
+
+    // Set the selected language before starting each recognition session.
+    recognition.lang = voiceLanguage;
+    if (el.input) el.input.value = "";
+
+    try {
+      window.speechSynthesis?.cancel();
+      recognition.start();
+    } catch {
+      setStatus("MIC BUSY — WAIT A MOMENT AND RETRY");
+    }
+  }
+
+  function restoreHistory() {
+    try {
+      const saved = JSON.parse(getSetting(STORE.history, "[]"));
+      if (!Array.isArray(saved)) return;
+
+      history = saved.filter(
+        item =>
+          item &&
+          ["user", "assistant"].includes(item.role) &&
+          typeof item.content === "string"
+      ).slice(-24);
+
+      // Restore recent messages in the visible chat.
+      for (const item of history.slice(-10)) {
+        addMessage(item.content, item.role === "user" ? "user" : "ai");
+      }
+    } catch {
+      history = [];
+    }
+  }
+
+  function bindEvents() {
+    el.form?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      sendToJarvis(el.input?.value || "");
+    });
+
+    el.mic?.addEventListener("click", toggleMic);
+    el.settingsBtn?.addEventListener("click", openSettings);
+    el.settingsForm?.addEventListener("submit", saveSettings);
+    el.saveSettings?.addEventListener("click", saveSettings);
+
+    el.closeSettings?.addEventListener("click", () => {
+      if (el.settings?.open) el.settings.close();
+    });
+
+    el.removeKey?.addEventListener("click", () => {
+      localStorage.removeItem(STORE.key);
+      if (el.apiKey) el.apiKey.value = "";
+      setStatus("API KEY REMOVED");
+    });
+
+    el.speak?.addEventListener("click", () => {
+      if (lastAnswer) speak(lastAnswer, getLanguage(lastAnswer));
+      else setStatus("NO ANSWER TO SPEAK YET");
+    });
+
+    el.stopSpeak?.addEventListener("click", () => {
+      window.speechSynthesis?.cancel();
+      setStatus("SPEECH STOPPED");
+    });
+
+    el.clear?.addEventListener("click", () => {
+      if (el.messages) el.messages.replaceChildren();
+      history = [];
+      lastAnswer = "";
+      localStorage.removeItem(STORE.history);
+      setStatus("CHAT CLEARED");
+    });
+
+    // Let the user press Enter to send, Shift+Enter for a new line.
+    el.input?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        el.form?.requestSubmit();
+      }
+    });
+
+    $("speakToggleBtn")?.addEventListener("click", () => {
+      const enabled = getSetting(STORE.voice, "true") !== "false";
+      localStorage.setItem(STORE.voice, String(!enabled));
+      setStatus(!enabled ? "AUTO VOICE ENABLED" : "AUTO VOICE DISABLED");
+    });
+  }
+
+  function init() {
+    restoreSettings();
+    updateClock();
+    setInterval(updateClock, 1000);
+    restoreHistory();
+    createLanguageButton();
+    setupRecognition();
+    bindEvents();
+
+    if (!getApiKey()) {
+      setStatus("ADD API KEY IN SETTINGS TO START");
+    } else {
+      setStatus("SYSTEM READY");
+    }
+
+    if (window.speechSynthesis) {
+      voices = window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        voices = window.speechSynthesis.getVoices();
+      };
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init, { once: true });
+  } else {
+    init();
+  }
+})();
