@@ -1,634 +1,844 @@
- "use strict";
+
+/* JARVIS Mobile Edition — frontend/script.js */
+"use strict";
 
 (() => {
-  // ==========================================
-  // JARVIS AI ASSISTANT
-  // ==========================================
-
   const $ = (id) => document.getElementById(id);
 
-  const messages = $("messages");
-  const input = $("userInput");
-  const typing = $("typing");
-  const dialog = $("settingsDialog");
-  const toolOutput = $("toolOutput");
+  const STORE = {
+    key: "jarvis_api_key",
+    url: "jarvis_api_url",
+    model: "jarvis_model",
+    history: "jarvis_chat_history"
+  };
 
-  let lastReply = "Hello! I am Jarvis AI Assistant.";
-  let chatHistory = [];
-  let timerHandle = null;
+  const DEFAULT_URL = "https://api.openai.com/v1/chat/completions";
+  const DEFAULT_MODEL = "gpt-4o-mini";
+
+  let busy = false;
   let recognition = null;
+  let timerHandle = null;
+  let lastAnswer = "";
+  let history = readHistory();
 
-  // ==========================================
-  // CLOCK AND DATE
-  // ==========================================
-
-  function updateClock() {
-    const now = new Date();
-
-    if ($("clock")) {
-      $("clock").textContent = now.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false
-      });
-    }
-
-    if ($("dateLine")) {
-      $("dateLine").textContent = now.toLocaleDateString([], {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric"
-      });
-    }
-  }
-
-  updateClock();
-  setInterval(updateClock, 1000);
-
-  // ==========================================
-  // CHAT MESSAGE DISPLAY
-  // ==========================================
-
-  function addMessage(text, sender = "assistant") {
-    const article = document.createElement("article");
-    article.className = `message ${sender}`;
-
-    const avatar = document.createElement("div");
-    avatar.className = "avatar";
-    avatar.textContent = sender === "assistant" ? "J" : "YOU";
-
-    const bubble = document.createElement("div");
-    bubble.className = "bubble";
-
-    // Use textContent to prevent HTML injection.
-    bubble.textContent = String(text);
-
-    article.append(avatar, bubble);
-    messages.appendChild(article);
-
-    messages.scrollTop = messages.scrollHeight;
-
-    if (sender === "assistant") {
-      lastReply = String(text);
-    }
-  }
-
-  function showTool(text) {
-    toolOutput.hidden = false;
-    toolOutput.textContent = String(text);
-  }
-
-  // ==========================================
-  // API SETTINGS
-  // ==========================================
-
-  function getApiKey() {
-    return sessionStorage.getItem("jarvis_api_key") || "";
-  }
-
-  function getApiEndpoint() {
-    return $("apiUrl").value.trim() ||
-      "https://api.openai.com/v1/chat/completions";
-  }
-
-  function getModel() {
-    return $("modelName").value.trim() || "gpt-4o-mini";
-  }
-
-  $("settingsBtn").addEventListener("click", () => {
-    $("apiKey").value = getApiKey();
-    dialog.showModal();
-  });
-
-  $("closeSettingsBtn").addEventListener("click", () => {
-    dialog.close();
-  });
-
-  $("settingsForm").addEventListener("submit", (event) => {
-    event.preventDefault();
-
-    const key = $("apiKey").value.trim();
-
-    if (key) {
-      sessionStorage.setItem("jarvis_api_key", key);
-      addMessage("AI settings saved for this browser tab.");
-    } else {
-      sessionStorage.removeItem("jarvis_api_key");
-      addMessage("No API key saved. Local tools are still available.");
-    }
-
-    dialog.close();
-  });
-
-  $("removeKeyBtn").addEventListener("click", () => {
-    sessionStorage.removeItem("jarvis_api_key");
-    $("apiKey").value = "";
-
-    addMessage("Your API key has been removed from this browser tab.");
-  });
-
-  // ==========================================
-  // AI CHAT REQUEST
-  // ==========================================
-
-  async function askAI(userText) {
-    const apiKey = getApiKey();
-
-    if (!apiKey) {
-      addMessage(
-        "Please open Settings ⚙ and enter your AI API key. " +
-        "Local tools such as the clock, calculator, timer and web search " +
-        "can work without an AI key."
-      );
-      return;
-    }
-
-    const endpoint = getApiEndpoint();
-
-    let parsedUrl;
-
+  function readHistory() {
     try {
-      parsedUrl = new URL(endpoint);
+      const data = JSON.parse(
+        localStorage.getItem(STORE.history) || "[]"
+      );
+
+      return Array.isArray(data)
+        ? data.filter(
+            (item) =>
+              item &&
+              ["user", "assistant"].includes(item.role) &&
+              typeof item.content === "string"
+          ).slice(-30)
+        : [];
     } catch {
-      addMessage("The API endpoint URL is invalid. Please check Settings.");
+      return [];
+    }
+  }
+
+  function saveHistory() {
+    try {
+      localStorage.setItem(
+        STORE.history,
+        JSON.stringify(history.slice(-30))
+      );
+    } catch (error) {
+      console.warn("Could not save chat history.", error);
+    }
+  }
+
+  function getSettings() {
+    return {
+      key: localStorage.getItem(STORE.key) || "",
+      url: localStorage.getItem(STORE.url) || DEFAULT_URL,
+      model: localStorage.getItem(STORE.model) || DEFAULT_MODEL
+    };
+  }
+
+  function setStatus(message) {
+    const element = $("voiceStatus");
+    if (element) element.textContent = message;
+  }
+
+  function showTyping(show) {
+    const element = $("typing");
+    if (element) element.hidden = !show;
+  }
+
+  function renderMessage(role, content) {
+    const container = $("messages");
+
+    if (!container) {
+      console.log(role + ": " + content);
       return;
     }
 
-    if (parsedUrl.protocol !== "https:") {
-      addMessage("For security, the API endpoint must use HTTPS.");
-      return;
+    const wrapper = document.createElement("div");
+    wrapper.className =
+      "message " +
+      (role === "user" ? "user-message" : "assistant-message");
+
+    const label = document.createElement("strong");
+    label.textContent = role === "user" ? "YOU" : "JARVIS";
+
+    const text = document.createElement("div");
+    text.className = "message-content";
+    text.textContent = content;
+
+    wrapper.append(label, text);
+    container.appendChild(wrapper);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function addMessage(role, content) {
+    history.push({ role, content });
+    history = history.slice(-30);
+    saveHistory();
+    renderMessage(role, content);
+
+    if (role === "assistant") {
+      lastAnswer = content;
     }
+  }
 
-    if (typing) typing.hidden = false;
+  function renderHistory() {
+    const container = $("messages");
+    if (!container) return;
 
-    const previousHistory = chatHistory.slice();
+    container.replaceChildren();
 
-    chatHistory.push({
-      role: "user",
-      content: userText
+    history.forEach((item) => {
+      renderMessage(item.role, item.content);
     });
 
-    // Keep the request reasonably small.
-    if (chatHistory.length > 16) {
-      chatHistory = chatHistory.slice(-16);
+    if (history.length) {
+      lastAnswer =
+        [...history].reverse().find((item) => item.role === "assistant")
+          ?.content || "";
+    }
+  }
+
+  function speak(text) {
+    if (!("speechSynthesis" in window)) {
+      setStatus("ఈ బ్రౌజర్‌లో వాయిస్ సమాధానాలు అందుబాటులో లేవు.");
+      return;
     }
 
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
+    window.speechSynthesis.cancel();
 
+    const utterance = new SpeechSynthesisUtterance(
+      String(text).slice(0, 4000)
+    );
+
+    utterance.lang = "te-IN";
+    utterance.rate = 1;
+
+    utterance.onstart = () => setStatus("JARVIS మాట్లాడుతోంది...");
+    utterance.onend = () => setStatus("సిద్ధంగా ఉంది.");
+    utterance.onerror = () => setStatus("వాయిస్ ప్లే చేయలేకపోయాను.");
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function stopSpeaking() {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
+    setStatus("వాయిస్ ఆపబడింది.");
+  }
+
+  function openSettings() {
+    const dialog = $("settingsDialog");
+    const settings = getSettings();
+
+    if ($("apiKey")) $("apiKey").value = settings.key;
+    if ($("apiUrl")) $("apiUrl").value = settings.url;
+    if ($("modelName")) $("modelName").value = settings.model;
+
+    if (dialog && typeof dialog.showModal === "function") {
+      if (!dialog.open) dialog.showModal();
+    } else {
+      setStatus("Settings‌లో API key నమోదు చేయండి.");
+    }
+  }
+
+  async function callAI() {
+    const settings = getSettings();
+
+    if (!settings.key) {
+      openSettings();
+      throw new Error(
+        "ముందుగా Settings‌లో API key నమోదు చేయండి."
+      );
+    }
+
+    let endpoint;
+
+    try {
+      endpoint = new URL(settings.url);
+    } catch {
+      throw new Error("API URL సరైనది కాదు.");
+    }
+
+    if (
+      endpoint.protocol !== "https:" &&
+      endpoint.hostname !== "localhost"
+    ) {
+      throw new Error("భద్రత కోసం HTTPS API URL ఉపయోగించండి.");
+    }
+
+    const conversation = [
+      {
+        role: "system",
+        content:
+          "You are JARVIS, a helpful personal AI assistant. " +
+          "Understand Telugu and English. Reply in the user's language. " +
+          "Answer questions clearly and help with tasks. " +
+          "Never claim a device action was completed unless it actually was. " +
+          "Explain honestly when a task needs permissions or integrations " +
+          "that are not available."
+      },
+      ...history.slice(-16).map((item) => ({
+        role: item.role,
+        content: item.content
+      }))
+    ];
+
+    const controller = new AbortController();
+
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 45000);
+
+    try {
+      const response = await fetch(endpoint.href, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
+          "Authorization": "Bearer " + settings.key
         },
-
         body: JSON.stringify({
-          model: getModel(),
-
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are JARVIS, a helpful and friendly AI assistant. " +
-                "Give accurate, clear and useful answers. " +
-                "If the user writes in Telugu, reply in Telugu. " +
-                "Do not claim to have performed actions that you did not perform."
-            },
-            ...chatHistory
-          ],
-
+          model: settings.model,
+          messages: conversation,
           temperature: 0.7
-        })
+        }),
+        signal: controller.signal
       });
 
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(
-          data.error?.message ||
-          `API request failed with status ${response.status}`
+          data?.error?.message ||
+          "API లోపం (HTTP " + response.status + ")"
         );
       }
 
-      const answer = data.choices?.[0]?.message?.content;
+      const answer = data?.choices?.[0]?.message?.content;
 
       if (typeof answer !== "string" || !answer.trim()) {
-        throw new Error("No answer returned by the AI provider.");
+        throw new Error("AI నుంచి సమాధానం రాలేదు.");
       }
 
-      chatHistory.push({
-        role: "assistant",
-        content: answer
-      });
-
-      addMessage(answer);
+      return answer.trim();
     } catch (error) {
-      chatHistory = previousHistory;
+      if (error.name === "AbortError") {
+        throw new Error(
+          "AI స్పందించడానికి ఎక్కువ సమయం పట్టింది. మళ్లీ ప్రయత్నించండి."
+        );
+      }
 
-      addMessage(
-        "AI connection failed: " + error.message +
-        "\n\nCheck your internet connection, API key, model name, " +
-        "endpoint URL and provider CORS settings."
-      );
+      if (error instanceof TypeError) {
+        throw new Error(
+          "API కనెక్షన్ విఫలమైంది. ఇంటర్నెట్, API URL, CORS సెట్టింగ్స్ తనిఖీ చేయండి."
+        );
+      }
+
+      throw error;
     } finally {
-      if (typing) typing.hidden = true;
+      clearTimeout(timeoutId);
     }
   }
 
-  // ==========================================
-  // LOCAL COMMANDS
-  // ==========================================
+  function calculate(expression) {
+    const normalized = expression
+      .replace(/,/g, "")
+      .replace(/[×x]/gi, "*")
+      .replace(/÷/g, "/");
 
-  function handleLocalCommand(text) {
-    const q = text.trim();
-    const lower = q.toLowerCase();
-
-    if (/^(hi|hello|hey|namaste)\b/i.test(q)) {
-      return "Hello! I am Jarvis. How can I help you?";
+    if (!/^[\d+\-*/().%\s]+$/.test(normalized)) {
+      return null;
     }
 
-    if (/\b(time|date|today)\b/i.test(lower)) {
-      return "Your local date and time is " +
-        new Date().toLocaleString() + ".";
+    if (normalized.length > 100) return null;
+
+    try {
+      const result = Function(
+        '"use strict"; return (' + normalized + ");"
+      )();
+
+      return typeof result === "number" && Number.isFinite(result)
+        ? String(result)
+        : "ఈ లెక్కకు సరైన ఫలితం లేదు.";
+    } catch {
+      return null;
     }
+  }
 
-    if (/\b(joke|funny)\b/i.test(lower)) {
-      const jokes = [
-        "Why did the computer go to the doctor? It had a virus!",
-        "Why do programmers like dark mode? Because light attracts bugs!",
-        "What did the Wi-Fi say to the phone? I feel a connection!"
-      ];
-
-      return jokes[Math.floor(Math.random() * jokes.length)];
-    }
-
-    if (/\b(quote|motivation|inspiration)\b/i.test(lower)) {
-      const quotes = [
-        "Great things are done by a series of small things brought together.",
-        "It always seems impossible until it is done.",
-        "The secret of getting ahead is getting started."
-      ];
-
-      return quotes[Math.floor(Math.random() * quotes.length)];
-    }
-
-    if (/\b(weather|temperature)\b/i.test(lower)) {
-      window.open(
-        "https://www.google.com/search?q=" +
-        encodeURIComponent("weather near me"),
-        "_blank",
-        "noopener,noreferrer"
-      );
-
-      return "I opened a web search for current weather.";
-    }
-
+  function startTimer(seconds) {
     if (
-      /\b(search|google|web search)\b/i.test(lower)
+      !Number.isFinite(seconds) ||
+      seconds < 1 ||
+      seconds > 86400
     ) {
+      return "టైమర్ 1 సెకను నుంచి 24 గంటల మధ్య ఉండాలి.";
+    }
+
+    if (timerHandle) clearInterval(timerHandle);
+
+    const endTime = Date.now() + seconds * 1000;
+
+    const tick = () => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((endTime - Date.now()) / 1000)
+      );
+
+      setStatus(
+        "టైమర్: " +
+        Math.floor(remaining / 60) +
+        " నిమిషాలు " +
+        (remaining % 60) +
+        " సెకన్లు"
+      );
+
+      if (remaining <= 0) {
+        clearInterval(timerHandle);
+        timerHandle = null;
+        setStatus("టైమర్ పూర్తయింది!");
+        speak("మీ టైమర్ పూర్తయింది.");
+      }
+    };
+
+    tick();
+    timerHandle = setInterval(tick, 500);
+
+    return Math.ceil(seconds / 60) +
+      " నిమిషాల టైమర్ ప్రారంభించాను.";
+  }
+
+  async function getWeather() {
+    if (!navigator.geolocation) {
+      throw new Error("ఈ పరికరంలో లొకేషన్ అందుబాటులో లేదు.");
+    }
+
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000
+      });
+    });
+
+    const latitude = position.coords.latitude;
+    const longitude = position.coords.longitude;
+
+    const url =
+      "https://api.open-meteo.com/v1/forecast" +
+      "?latitude=" + encodeURIComponent(latitude) +
+      "&longitude=" + encodeURIComponent(longitude) +
+      "&current=temperature_2m,relative_humidity_2m,apparent_temperature" +
+      "&timezone=auto";
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error("వాతావరణ సమాచారం పొందలేకపోయాను.");
+    }
+
+    const data = await response.json();
+    const current = data.current;
+
+    return (
+      "ప్రస్తుత ఉష్ణోగ్రత " + current.temperature_2m + "°C. " +
+      "అనుభూతి ఉష్ణోగ్రత " + current.apparent_temperature + "°C. " +
+      "తేమ " + current.relative_humidity_2m + "%."
+    );
+  }
+
+  function webSearch(query) {
+    const url =
+      "https://www.google.com/search?q=" +
+      encodeURIComponent(query);
+
+    window.open(url, "_blank", "noopener,noreferrer");
+
+    return "వెబ్ సెర్చ్ తెరవడానికి ప్రయత్నించాను. ఫలితాలను బ్రౌజర్‌లో చూడండి.";
+  }
+
+  function localCommand(text) {
+    const query = text.trim();
+
+    if (/^(hi|hello|hey|హాయ్|హలో|నమస్కారం)[!. ]*$/i.test(query)) {
+      return "హలో! నేను JARVIS. నీకు ఏం సహాయం చేయాలి?";
+    }
+
+    if (/(what time|current time|సమయం ఎంత|టైం ఎంత)/i.test(query)) {
+      return "ఇప్పుడు సమయం " +
+        new Intl.DateTimeFormat("te-IN", {
+          hour: "numeric",
+          minute: "2-digit"
+        }).format(new Date()) + ".";
+    }
+
+    if (/(what date|today date|today's date|ఈ రోజు తేదీ|తేదీ ఎంత)/i.test(query)) {
+      return "ఈ రోజు " +
+        new Intl.DateTimeFormat("te-IN", {
+          dateStyle: "full"
+        }).format(new Date()) + ".";
+    }
+
+    const calculationMatch = query.match(
+      /^(?:calculate|లెక్కించు|క్యాలిక్యులేట్)\s+(.+)$/i
+    );
+
+    if (calculationMatch) {
+      const result = calculate(calculationMatch[1]);
+      if (result !== null) return "ఫలితం: " + result;
+    }
+
+    if (/^[\d(].*[\d)]$/.test(query)) {
+      const result = calculate(query);
+      if (result !== null) return "ఫలితం: " + result;
+    }
+
+    const timerMatch = query.match(
+      /(?:timer|టైమర్)\s*(?:for|కు)?\s*(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|సెకన్లు|నిమిషాలు|గంటలు)?/i
+    );
+
+    if (timerMatch) {
+      const amount = Number(timerMatch[1]);
+      const unit = (timerMatch[2] || "minutes").toLowerCase();
+
+      let seconds = amount;
+
+      if (/hour|గంట/.test(unit)) seconds *= 3600;
+      else if (/minute|min|నిమిష/.test(unit)) seconds *= 60;
+
+      return startTimer(seconds);
+    }
+
+    if (/(weather|వాతావరణం)/i.test(query)) {
+      return "__WEATHER__";
+    }
+
+    const searchMatch = query.match(
+      /^(?:search|వెతుకు|సెర్చ్)\s+(.+)/i
+    );
+
+    if (searchMatch) return webSearch(searchMatch[1]);
+
+    if (/(open youtube|యూట్యూబ్ ఓపెన్)/i.test(query)) {
       window.open(
-        "https://www.google.com/search?q=" +
-        encodeURIComponent(q),
+        "https://www.youtube.com/",
         "_blank",
         "noopener,noreferrer"
       );
-
-      return "I opened a web search for: " + q;
+      return "YouTube తెరవడానికి ప్రయత్నించాను.";
     }
 
-    if (/\b(timer)\b/i.test(lower)) {
-      startTimer(1);
-      return "A one-minute timer has started.";
+    if (/(open google|గూగుల్ ఓపెన్)/i.test(query)) {
+      window.open(
+        "https://www.google.com/",
+        "_blank",
+        "noopener,noreferrer"
+      );
+      return "Google తెరవడానికి ప్రయత్నించాను.";
     }
 
-    if (/\b(password)\b/i.test(lower)) {
-      return generatePassword();
+    if (/(stop speaking|మాట్లాడటం ఆపు|వాయిస్ ఆపు)/i.test(query)) {
+      stopSpeaking();
+      return "వాయిస్ ఆపాను.";
+    }
+
+    if (/(generate password|పాస్‌వర్డ్ తయారు|పాస్వర్డ్ తయారు)/i.test(query)) {
+      const alphabet =
+        "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*";
+
+      const bytes = new Uint8Array(18);
+      crypto.getRandomValues(bytes);
+
+      const password = Array.from(
+        bytes,
+        (byte) => alphabet[byte % alphabet.length]
+      ).join("");
+
+      return "పాస్‌వర్డ్: " + password +
+        "\nదీన్ని సురక్షితమైన పాస్‌వర్డ్ మేనేజర్‌లో సేవ్ చేసుకోండి.";
     }
 
     return null;
   }
 
-  // ==========================================
-  // CHAT FORM
-  // ==========================================
+  async function handleInput(rawText) {
+    const text = String(rawText || "").trim();
 
-  $("chatForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
+    if (!text || busy) return;
 
-    const text = input.value.trim();
+    busy = true;
 
-    if (!text) return;
+    if ($("userInput")) $("userInput").value = "";
 
-    input.value = "";
-
-    addMessage(text, "user");
-
-    const localAnswer = handleLocalCommand(text);
-
-    if (localAnswer !== null) {
-      addMessage(localAnswer);
-      return;
-    }
-
-    await askAI(text);
-  });
-
-  // ==========================================
-  // QUICK ACTION BUTTONS
-  // ==========================================
-
-  document.querySelectorAll("[data-command]").forEach((button) => {
-    button.addEventListener("click", () => {
-      input.value = button.dataset.command;
-      $("chatForm").requestSubmit();
-    });
-  });
-
-  $("clearBtn").addEventListener("click", () => {
-    messages.replaceChildren();
-    chatHistory = [];
-
-    addMessage("Conversation cleared. How can I help you?");
-  });
-
-  // ==========================================
-  // WEB SEARCH
-  // ==========================================
-
-  $("searchBtn").addEventListener("click", () => {
-    const query = prompt("What would you like to search for?");
-
-    if (!query || !query.trim()) return;
-
-    window.open(
-      "https://www.google.com/search?q=" +
-      encodeURIComponent(query.trim()),
-      "_blank",
-      "noopener,noreferrer"
-    );
-  });
-
-  // ==========================================
-  // WEATHER SEARCH
-  // ==========================================
-
-  $("weatherBtn").addEventListener("click", () => {
-    window.open(
-      "https://www.google.com/search?q=" +
-      encodeURIComponent("weather near me"),
-      "_blank",
-      "noopener,noreferrer"
-    );
-  });
-
-  // ==========================================
-  // TIMER
-  // ==========================================
-
-  function startTimer(minutes = 1) {
-    if (timerHandle) {
-      clearTimeout(timerHandle);
-    }
-
-    const duration = Number(minutes);
-
-    if (!Number.isFinite(duration) ||
-        duration < 1 ||
-        duration > 180) {
-      showTool("Please enter a duration from 1 to 180 minutes.");
-      return;
-    }
-
-    showTool(`Timer running for ${duration} minute(s).`);
-
-    timerHandle = setTimeout(() => {
-      showTool("⏰ Your timer has finished!");
-
-      if ("speechSynthesis" in window) {
-        speechSynthesis.speak(
-          new SpeechSynthesisUtterance(
-            "Your Jarvis timer has finished."
-          )
-        );
-      }
-
-      if (
-        "Notification" in window &&
-        Notification.permission === "granted"
-      ) {
-        new Notification("Jarvis Timer", {
-          body: "Your timer has finished."
-        });
-      }
-    }, duration * 60 * 1000);
-  }
-
-  $("timerBtn").addEventListener("click", () => {
-    const value = prompt(
-      "Timer duration in minutes (1-180):",
-      "1"
-    );
-
-    if (value === null) return;
-
-    startTimer(value);
-  });
-
-  // ==========================================
-  // CALCULATOR
-  // ==========================================
-
-  $("calcBtn").addEventListener("click", () => {
-    const expression = prompt(
-      "Enter a calculation, e.g. (12 + 8) * 3"
-    );
-
-    if (!expression || !expression.trim()) return;
-
-    const safeExpression = expression.trim();
-
-    // Only allow numeric arithmetic characters.
-    if (!/^[0-9+\-*/%().\s]+$/.test(safeExpression)) {
-      showTool(
-        "Invalid input. Use numbers, parentheses and basic arithmetic operators only."
-      );
-      return;
-    }
+    addMessage("user", text);
+    showTyping(true);
 
     try {
-      const result = Function(
-        '"use strict"; return (' + safeExpression + ');'
-      )();
+      let answer = localCommand(text);
 
-      if (!Number.isFinite(result)) {
-        throw new Error("Invalid result");
+      if (answer === "__WEATHER__") {
+        try {
+          answer = await getWeather();
+        } catch (error) {
+          answer = error.code === 1
+            ? "వాతావరణం తెలుసుకోవడానికి లొకేషన్ అనుమతి ఇవ్వాలి."
+            : (error.message || "వాతావరణ సమాచారం అందుబాటులో లేదు.");
+        }
+      } else if (answer === null) {
+        answer = await callAI();
       }
 
-      showTool("Calculation result: " + result);
-    } catch {
-      showTool("Could not calculate that expression.");
+      addMessage("assistant", answer);
+    } catch (error) {
+      const message = error.message || "తెలియని సమస్య వచ్చింది.";
+      addMessage("assistant", "క్షమించు: " + message);
+      setStatus(message);
+    } finally {
+      showTyping(false);
+      busy = false;
     }
-  });
-
-  // ==========================================
-  // PASSWORD GENERATOR
-  // ==========================================
-
-  function generatePassword() {
-    const characters =
-      "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*";
-
-    const randomValues = new Uint32Array(18);
-    crypto.getRandomValues(randomValues);
-
-    const password = Array.from(
-      randomValues,
-      value => characters[value % characters.length]
-    ).join("");
-
-    showTool("Generated password:\n" + password);
-
-    return "A new password was generated. See the Assistant Tools panel.";
   }
 
-  $("passwordBtn").addEventListener("click", () => {
-    generatePassword();
-  });
+  function setupVoice() {
+    const button = $("micBtn");
 
-  // ==========================================
-  // TEXT TO SPEECH
-  // ==========================================
+    const SpeechRecognition =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
 
-  $("speakBtn").addEventListener("click", () => {
-    if (!("speechSynthesis" in window)) {
-      showTool("Text-to-speech is not supported in this browser.");
-      return;
-    }
+    if (!button) return;
 
-    speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(lastReply);
-
-    utterance.lang = navigator.language || "en-US";
-
-    speechSynthesis.speak(utterance);
-  });
-
-  $("stopSpeakBtn").addEventListener("click", () => {
-    if ("speechSynthesis" in window) {
-      speechSynthesis.cancel();
-    }
-  });
-
-  // ==========================================
-  // VOICE INPUT
-  // ==========================================
-
-  const SpeechRecognition =
-    window.SpeechRecognition ||
-    window.webkitSpeechRecognition;
-
-  $("micBtn").addEventListener("click", () => {
     if (!SpeechRecognition) {
-      $("voiceStatus").textContent =
-        "Voice recognition is not supported here. Try Chrome over HTTPS.";
+      button.title =
+        "ఈ బ్రౌజర్‌లో వాయిస్ రికగ్నిషన్ అందుబాటులో లేదు.";
       return;
     }
 
     recognition = new SpeechRecognition();
+    recognition.lang = "te-IN";
+    recognition.continuous = false;
+    recognition.interimResults = true;
 
-    recognition.lang = navigator.language || "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    $("micBtn").classList.add("listening");
-    $("voiceStatus").textContent = "Listening... Speak now.";
+    recognition.onstart = () => {
+      button.classList.add("listening");
+      setStatus("వింటున్నాను... మాట్లాడండి.");
+    };
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
+      let transcript = "";
 
-      input.value = transcript;
-      $("chatForm").requestSubmit();
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+
+      if ($("userInput")) {
+        $("userInput").value = transcript;
+      }
+
+      const last = event.results[event.results.length - 1];
+
+      if (last && last.isFinal) {
+        handleInput(transcript);
+      }
     };
 
     recognition.onerror = (event) => {
-      $("voiceStatus").textContent =
-        "Voice input error: " + event.error;
+      setStatus("మైక్రోఫోన్ సమస్య: " + event.error);
     };
 
     recognition.onend = () => {
-      $("micBtn").classList.remove("listening");
+      button.classList.remove("listening");
     };
 
-    try {
-      recognition.start();
-    } catch (error) {
-      $("voiceStatus").textContent =
-        "Could not start microphone: " + error.message;
-
-      $("micBtn").classList.remove("listening");
-    }
-  });
-
-  // ==========================================
-  // MUSIC SEARCH
-  // ==========================================
-
-  $("musicBtn").addEventListener("click", () => {
-    const query = prompt("Enter a song or artist name:");
-
-    if (!query || !query.trim()) return;
-
-    window.open(
-      "https://www.youtube.com/results?search_query=" +
-      encodeURIComponent(query.trim()),
-      "_blank",
-      "noopener,noreferrer"
-    );
-  });
-
-  // ==========================================
-  // FILE PICKER
-  // ==========================================
-
-  $("filesBtn").addEventListener("click", () => {
-    $("filePicker").click();
-  });
-
-  $("filePicker").addEventListener("change", () => {
-    const files = Array.from($("filePicker").files || []);
-
-    if (!files.length) {
-      showTool("No files selected.");
-      return;
-    }
-
-    const summary = files.map((file) => {
-      return `${file.name} — ${file.size} bytes`;
-    });
-
-    showTool(
-      "Selected files:\n" + summary.join("\n") +
-      "\n\nThe browser can access only files you choose."
-    );
-  });
-
-  // ==========================================
-  // OPTIONAL SERVICE WORKER
-  // ==========================================
-
-  if (
-    "serviceWorker" in navigator &&
-    location.protocol.startsWith("http")
-  ) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js")
-        .catch((error) => {
-          console.warn("Service worker registration failed:", error);
-        });
+    button.addEventListener("click", () => {
+      try {
+        recognition.start();
+      } catch {
+        setStatus("వాయిస్ రికగ్నిషన్ ఇప్పటికే ప్రారంభమై ఉండవచ్చు.");
+      }
     });
   }
 
+  function setupSettings() {
+    const dialog = $("settingsDialog");
+    const form = $("settingsForm");
+
+    if ($("settingsBtn")) {
+      $("settingsBtn").addEventListener("click", openSettings);
+    }
+
+    if ($("closeSettingsBtn")) {
+      $("closeSettingsBtn").addEventListener("click", () => {
+        if (dialog && dialog.open) dialog.close();
+      });
+    }
+
+    if (form) {
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+
+        const key = $("apiKey")?.value.trim() || "";
+        const url = $("apiUrl")?.value.trim() || DEFAULT_URL;
+        const model = $("modelName")?.value.trim() || DEFAULT_MODEL;
+
+        let parsed;
+
+        try {
+          parsed = new URL(url);
+        } catch {
+          setStatus("సరైన API URL నమోదు చేయండి.");
+          return;
+        }
+
+        if (
+          parsed.protocol !== "https:" &&
+          parsed.hostname !== "localhost"
+        ) {
+          setStatus("HTTPS API URL ఉపయోగించండి.");
+          return;
+        }
+
+        if (key) {
+          localStorage.setItem(STORE.key, key);
+        } else {
+          localStorage.removeItem(STORE.key);
+        }
+
+        localStorage.setItem(STORE.url, url);
+        localStorage.setItem(STORE.model, model);
+
+        if (dialog && dialog.open) dialog.close();
+
+        setStatus("Settings సేవ్ అయ్యాయి.");
+      });
+    }
+
+    if ($("removeKeyBtn")) {
+      $("removeKeyBtn").addEventListener("click", () => {
+        localStorage.removeItem(STORE.key);
+        if ($("apiKey")) $("apiKey").value = "";
+        setStatus("API key తొలగించబడింది.");
+      });
+    }
+  }
+
+  function setupControls() {
+    const form = $("chatForm");
+
+    if (form) {
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        handleInput($("userInput")?.value || "");
+      });
+    }
+
+    if ($("clearBtn")) {
+      $("clearBtn").addEventListener("click", () => {
+        history = [];
+        lastAnswer = "";
+        saveHistory();
+
+        if ($("messages")) $("messages").replaceChildren();
+
+        setStatus("చాట్ హిస్టరీ క్లియర్ అయింది.");
+      });
+    }
+
+    if ($("speakBtn")) {
+      $("speakBtn").addEventListener("click", () => {
+        if (lastAnswer) speak(lastAnswer);
+        else setStatus("ముందుగా JARVIS సమాధానం పొందండి.");
+      });
+    }
+
+    if ($("stopSpeakBtn")) {
+      $("stopSpeakBtn").addEventListener("click", stopSpeaking);
+    }
+
+    if ($("searchBtn")) {
+      $("searchBtn").addEventListener("click", () => {
+        const query = $("userInput")?.value.trim();
+
+        if (query) webSearch(query);
+        else setStatus("వెతకాల్సిన విషయం టైప్ చేయండి.");
+      });
+    }
+
+    if ($("weatherBtn")) {
+      $("weatherBtn").addEventListener("click", async () => {
+        try {
+          addMessage("assistant", await getWeather());
+        } catch (error) {
+          setStatus(error.message || "వాతావరణ సమాచారం అందుబాటులో లేదు.");
+        }
+      });
+    }
+
+    if ($("timerBtn")) {
+      $("timerBtn").addEventListener("click", () => {
+        const value = window.prompt("ఎన్ని నిమిషాల టైమర్ కావాలి?");
+        if (value === null) return;
+
+        const answer = startTimer(Number(value) * 60);
+        addMessage("assistant", answer);
+        setStatus(answer);
+      });
+    }
+
+    if ($("calcBtn")) {
+      $("calcBtn").addEventListener("click", () => {
+        const expression = window.prompt(
+          "లెక్కను నమోదు చేయండి (ఉదా: 12 * 8):"
+        );
+
+        if (expression === null) return;
+
+        const result = calculate(expression);
+
+        addMessage(
+          "assistant",
+          result === null
+            ? "ఈ లెక్కను అర్థం చేసుకోలేకపోయాను."
+            : "ఫలితం: " + result
+        );
+      });
+    }
+
+    if ($("passwordBtn")) {
+      $("passwordBtn").addEventListener("click", () => {
+        const alphabet =
+          "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*";
+
+        const bytes = new Uint8Array(18);
+        crypto.getRandomValues(bytes);
+
+        addMessage(
+          "assistant",
+          "తయారు చేసిన పాస్‌వర్డ్: " +
+          Array.from(
+            bytes,
+            (byte) => alphabet[byte % alphabet.length]
+          ).join("")
+        );
+      });
+    }
+
+    if ($("musicBtn")) {
+      $("musicBtn").addEventListener("click", () => {
+        const query = window.prompt("ఏ పాట లేదా కళాకారుడిని వెతకాలి?");
+
+        if (query && query.trim()) {
+          window.open(
+            "https://www.youtube.com/results?search_query=" +
+              encodeURIComponent(query),
+            "_blank",
+            "noopener,noreferrer"
+          );
+        }
+      });
+    }
+
+    if ($("filesBtn") && $("filePicker")) {
+      $("filesBtn").addEventListener("click", () => {
+        $("filePicker").click();
+      });
+
+      $("filePicker").addEventListener("change", (event) => {
+        const files = Array.from(event.target.files || []);
+
+        if (!files.length) return;
+
+        const names = files.map(
+          (file) =>
+            file.name + " (" + Math.round(file.size / 1024) + " KB)"
+        ).join("\n");
+
+        addMessage("assistant", "ఎంచుకున్న ఫైళ్లు:\n" + names);
+
+        setStatus(
+          "ఫైళ్లు ఎంచుకోబడ్డాయి. వాటి కంటెంట్ చదవడానికి ప్రత్యేక కోడ్ అవసరం."
+        );
+      });
+    }
+  }
+
+  function setupClock() {
+    const update = () => {
+      const now = new Date();
+
+      if ($("clock")) {
+        $("clock").textContent = new Intl.DateTimeFormat("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true
+        }).format(now);
+      }
+
+      if ($("dateLine")) {
+        $("dateLine").textContent = new Intl.DateTimeFormat("en-IN", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric"
+        }).format(now);
+      }
+    };
+
+    update();
+    setInterval(update, 1000);
+  }
+
+  function init() {
+    renderHistory();
+    setupClock();
+    setupSettings();
+    setupControls();
+    setupVoice();
+
+    if (
+      "serviceWorker" in navigator &&
+      location.protocol.startsWith("http")
+    ) {
+      navigator.serviceWorker.register("./sw.js").catch((error) => {
+        console.warn("Service worker registration failed.", error);
+      });
+    }
+
+    setStatus(
+      getSettings().key
+        ? "JARVIS సిద్ధంగా ఉంది. మీ ప్రశ్న అడగండి."
+        : "సిద్ధంగా ఉంది. AI సమాధానాల కోసం Settings‌లో API key నమోదు చేయండి."
+    );
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init, { once: true });
+  } else {
+    init();
+  }
 })();
