@@ -1,1 +1,32 @@
-{"name":"KALKI Personal AI Assistant","short_name":"KALKI","start_url":"./jarvis-build-log.html","display":"standalone","background_color":"#07101b","theme_color":"#07101b","icons":[{"src":"kalki-logo.png","sizes":"192x192","type":"image/png"}]}
+
+{
+  "id": "./",
+  "name": "JARVIS Mobile Edition",
+  "short_name": "JARVIS",
+  "description": "Your personal AI voice assistant.",
+  "lang": "en",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#050816",
+  "theme_color": "#050816",
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
