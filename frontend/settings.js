@@ -1,4 +1,3 @@
-
 const STORAGE_KEY = "jarvis_settings_v1";
 
 function readSettings() {
