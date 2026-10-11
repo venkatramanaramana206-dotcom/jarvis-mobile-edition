@@ -1,618 +1,277 @@
- <!DOCTYPE html>
+ 
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#050b14">
-    <title>JARVIS | Build Log</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <style>
-        :root {
-            --bg: #05080e;
-            --panel: #0b1421;
-            --border: #12334a;
-            --blue: #00c8ff;
-            --green: #00f5a0;
-            --red: #ff526b;
-            --text: #d9f5ff;
-            --muted: #7895a8;
-        }
+  <meta name="theme-color" content="#020812">
+  <title>JARVIS | Build Log</title>
 
-        * {
-            box-sizing: border-box;
-        }
+  <link rel="stylesheet" href="./style.css">
 
-        body {
-            margin: 0;
-            min-height: 100vh;
-            padding: 20px;
-            color: var(--text);
-            background:
-                radial-gradient(ellipse at top, #10283b 0%, transparent 55%),
-                var(--bg);
-            font-family: "Courier New", monospace;
-        }
+  <style>
+    .build-container {
+      max-width: 760px;
+      margin: auto;
+      padding: 24px 18px;
+    }
 
-        .container {
-            width: 100%;
-            max-width: 900px;
-            margin: 0 auto;
-        }
+    .build-title {
+      font-family: Orbitron, sans-serif;
+      color: #58eaff;
+      font-size: 25px;
+      margin-bottom: 8px;
+    }
 
-        header {
-            text-align: center;
-            padding: 22px 12px;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 22px;
-        }
+    .build-subtitle {
+      color: #8ca8ba;
+      margin-bottom: 25px;
+      line-height: 1.6;
+    }
 
-        .logo {
-            font-size: clamp(25px, 6vw, 42px);
-            font-weight: bold;
-            letter-spacing: 5px;
-            color: var(--blue);
-            text-shadow: 0 0 18px #00c8ff80;
-        }
+    .build-card {
+      border: 1px solid rgba(88, 234, 255, .25);
+      background: rgba(7, 21, 34, .95);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
 
-        .subtitle {
-            margin-top: 10px;
-            color: var(--muted);
-            font-size: 12px;
-            letter-spacing: 2px;
-        }
+    .build-card h2 {
+      color: #58eaff;
+      font-size: 15px;
+      margin-top: 0;
+    }
 
-        .panel {
-            background: #0b1421e8;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 18px;
-            margin-bottom: 18px;
-            box-shadow: 0 0 25px #001c2b50;
-        }
+    .build-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(88, 234, 255, .12);
+      color: #eafaff;
+      font-size: 13px;
+      line-height: 1.6;
+    }
 
-        h2 {
-            margin-top: 0;
-            font-size: 15px;
-            letter-spacing: 1px;
-            color: var(--blue);
-        }
+    .build-item:last-child {
+      border-bottom: 0;
+    }
 
-        .status-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
+    .build-icon {
+      color: #58eaff;
+      font-size: 17px;
+    }
 
-        .status {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-        }
+    .build-status {
+      display: inline-block;
+      border: 1px solid rgba(88, 234, 255, .3);
+      border-radius: 30px;
+      padding: 7px 12px;
+      color: #58eaff;
+      font-size: 11px;
+      margin-bottom: 16px;
+    }
 
-        .dot {
-            width: 9px;
-            height: 9px;
-            border-radius: 50%;
-            background: var(--green);
-            box-shadow: 0 0 10px var(--green);
-        }
+    .build-code {
+      display: block;
+      padding: 12px;
+      background: #020b14;
+      border: 1px solid rgba(88, 234, 255, .18);
+      border-radius: 8px;
+      color: #a8f5ff;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      font-size: 12px;
+      margin: 10px 0;
+    }
 
-        .dot.warning {
-            background: #ffbd4a;
-            box-shadow: 0 0 10px #ffbd4a;
-        }
+    .build-warning {
+      color: #ffd68a;
+      font-size: 12px;
+      line-height: 1.7;
+    }
 
-        .dot.error {
-            background: var(--red);
-            box-shadow: 0 0 10px var(--red);
-        }
+    .build-link {
+      display: inline-block;
+      color: #00111c;
+      background: #58eaff;
+      padding: 11px 15px;
+      border-radius: 9px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 12px;
+      margin-top: 8px;
+    }
 
-        .metrics {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 10px;
-            margin-top: 18px;
-        }
-
-        .metric {
-            padding: 14px 8px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            text-align: center;
-            background: #07101b;
-        }
-
-        .metric-value {
-            color: var(--blue);
-            font-size: 23px;
-            font-weight: bold;
-        }
-
-        .metric-label {
-            color: var(--muted);
-            font-size: 10px;
-            margin-top: 8px;
-        }
-
-        .log-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .log-item {
-            display: grid;
-            grid-template-columns: 75px 1fr;
-            gap: 10px;
-            padding: 12px 0;
-            border-bottom: 1px solid #142636;
-            font-size: 12px;
-            line-height: 1.6;
-            overflow-wrap: anywhere;
-        }
-
-        .log-item:last-child {
-            border-bottom: none;
-        }
-
-        .time {
-            color: var(--muted);
-        }
-
-        .success {
-            color: var(--green);
-        }
-
-        .info {
-            color: var(--blue);
-        }
-
-        .warning-text {
-            color: #ffbd4a;
-        }
-
-        .error-text {
-            color: var(--red);
-        }
-
-        .file-list {
-            display: grid;
-            gap: 9px;
-        }
-
-        .file-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            padding: 11px;
-            border: 1px solid #142b3b;
-            border-radius: 7px;
-            font-size: 12px;
-        }
-
-        .file-name {
-            overflow-wrap: anywhere;
-        }
-
-        .file-state {
-            color: var(--muted);
-            white-space: nowrap;
-        }
-
-        .buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        button {
-            flex: 1;
-            min-width: 130px;
-            padding: 12px 14px;
-            color: var(--blue);
-            background: #071724;
-            border: 1px solid var(--blue);
-            border-radius: 7px;
-            font-family: inherit;
-            font-size: 12px;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background: #0b2a3d;
-        }
-
-        .primary {
-            color: #001018;
-            background: var(--blue);
-            font-weight: bold;
-        }
-
-        .primary:hover {
-            background: #70e4ff;
-        }
-
-        .note {
-            color: var(--muted);
-            font-size: 12px;
-            line-height: 1.7;
-        }
-
-        footer {
-            text-align: center;
-            color: #496779;
-            font-size: 11px;
-            padding: 18px 0;
-        }
-
-        @media (max-width: 480px) {
-            body {
-                padding: 12px;
-            }
-
-            .panel {
-                padding: 14px;
-            }
-
-            .metrics {
-                grid-template-columns: 1fr;
-            }
-
-            .metric {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                text-align: left;
-                padding: 12px;
-            }
-
-            .metric-label {
-                margin-top: 0;
-            }
-
-            .log-item {
-                grid-template-columns: 1fr;
-                gap: 2px;
-            }
-        }
-    </style>
+    .back-link {
+      display: inline-block;
+      color: #58eaff;
+      text-decoration: none;
+      margin: 8px 0 24px;
+      font-size: 13px;
+    }
+  </style>
 </head>
 
 <body>
-    <main class="container">
-        <header>
-            <div class="logo">J.A.R.V.I.S.</div>
-            <div class="subtitle">SYSTEM BUILD & DIAGNOSTICS</div>
-        </header>
+  <main class="build-container">
 
-        <section class="panel">
-            <div class="status-row">
-                <h2> SYSTEM STATUS</h2>
-                <div class="status">
-                    <span class="dot" id="statusDot"></span>
-                    <span id="statusText">DIAGNOSTICS READY</span>
-                </div>
-            </div>
+    <div class="build-title">J.A.R.V.I.S.</div>
+    <p class="build-subtitle">
+      System Diagnostics & Build Center
+    </p>
 
-            <div class="metrics">
-                <div class="metric">
-                    <div class="metric-value" id="checkCount">0</div>
-                    <div class="metric-label">CHECKS COMPLETED</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value" id="passCount">0</div>
-                    <div class="metric-label">CHECKS PASSED</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value" id="warnCount">0</div>
-                    <div class="metric-label">WARNINGS</div>
-                </div>
-            </div>
-        </section>
+    <div class="build-status">
+      ● BUILD CENTER READY
+    </div>
 
-        <section class="panel">
-            <h2>PROJECT FILES</h2>
-            <div class="file-list" id="fileList">
-                <div class="file-row">
-                    <span class="file-name">index.html</span>
-                    <span class="file-state">NOT CHECKED</span>
-                </div>
-                <div class="file-row">
-                    <span class="file-name">style.css</span>
-                    <span class="file-state">NOT CHECKED</span>
-                </div>
-                <div class="file-row">
-                    <span class="file-name">script.js</span>
-                    <span class="file-state">NOT CHECKED</span>
-                </div>
-                <div class="file-row">
-                    <span class="file-name">manifest.json</span>
-                    <span class="file-state">NOT CHECKED</span>
-                </div>
-                <div class="file-row">
-                    <span class="file-name">mic-button.html</span>
-                    <span class="file-state">NOT CHECKED</span>
-                </div>
-            </div>
-            <p class="note">
-                These checks attempt to fetch files relative to this page.
-                A file is only confirmed when the browser can access it.
-            </p>
-        </section>
+    <!-- PROJECT STATUS -->
+    <section class="build-card">
+      <h2>01 / PROJECT STATUS</h2>
 
-        <section class="panel">
-            <h2>BUILD / DIAGNOSTIC LOG</h2>
-            <ul class="log-list" id="logList" aria-live="polite">
-                <li class="log-item">
-                    <span class="time">STARTUP</span>
-                    <span class="info">JARVIS diagnostics interface initialized.</span>
-                </li>
-            </ul>
-        </section>
+      <div class="build-item">
+        <span class="build-icon">✓</span>
+        <div>
+          <strong>Frontend structure</strong><br>
+          HTML, CSS and JavaScript files are prepared.
+        </div>
+      </div>
 
-        <section class="panel">
-            <h2>CONTROLS</h2>
-            <div class="buttons">
-                <button class="primary" id="runChecks">RUN FILE CHECKS</button>
-                <button id="exportLog">EXPORT LOG</button>
-                <button id="clearLog">CLEAR LOG</button>
-                <button id="openApp">OPEN JARVIS APP</button>
-            </div>
-            <p class="note">
-                This page checks browser-accessible project files and exports a
-                diagnostic report. It does not compile an Android APK by itself.
-            </p>
-        </section>
+      <div class="build-item">
+        <span class="build-icon">✓</span>
+        <div>
+          <strong>Assistant interface</strong><br>
+          Chat screen, settings and microphone controls
+          are included in the project design.
+        </div>
+      </div>
 
-        <footer>
-            J.A.R.V.I.S. PERSONAL ASSISTANT · DIAGNOSTICS CONSOLE
-        </footer>
-    </main>
+      <div class="build-item">
+        <span class="build-icon">○</span>
+        <div>
+          <strong>Live build verification</strong><br>
+          The project must be built and tested in your
+          environment before it can be marked successful.
+        </div>
+      </div>
+    </section>
 
-    <script>
-    (() => {
-        "use strict";
+    <!-- INSTALLATION -->
+    <section class="build-card">
+      <h2>02 / INSTALLATION</h2>
 
-        const files = [
-            "index.html",
-            "style.css",
-            "script.js",
-            "manifest.json",
-            "mic-button.html"
-        ];
+      <p>Install Node.js, then open a terminal in your
+      project directory.</p>
 
-        const logList = document.getElementById("logList");
-        const fileList = document.getElementById("fileList");
-        const statusText = document.getElementById("statusText");
-        const statusDot = document.getElementById("statusDot");
+      <code class="build-code">npm install</code>
+      <code class="build-code">npm run build</code>
 
-        let checks = 0;
-        let passed = 0;
-        let warnings = 0;
-        let logEntries = [];
+      <p>Start the local development server:</p>
+      <code class="build-code">npm run start</code>
+    </section>
 
-        function timestamp() {
-            return new Date().toLocaleTimeString();
-        }
+    <!-- ANDROID BUILD -->
+    <section class="build-card">
+      <h2>03 / ANDROID APK BUILD</h2>
 
-        function addLog(message, type = "info") {
-            const time = timestamp();
-            logEntries.push({ time, message, type });
+      <p>For a Capacitor Android build, run:</p>
 
-            const item = document.createElement("li");
-            item.className = "log-item";
+      <code class="build-code">npx cap add android</code>
+      <code class="build-code">npx cap sync android</code>
 
-            const timeElement = document.createElement("span");
-            timeElement.className = "time";
-            timeElement.textContent = time;
+      <p>Open the generated Android project in Android
+      Studio and build a debug APK, or use the configured
+      GitHub Actions workflow.</p>
 
-            const messageElement = document.createElement("span");
-            messageElement.className = type;
-            messageElement.textContent = message;
+      <code class="build-code">android/app/build/outputs/apk/debug/app-debug.apk</code>
 
-            item.append(timeElement, messageElement);
-            logList.appendChild(item);
-            logList.scrollTop = logList.scrollHeight;
-        }
+      <p class="build-warning">
+        The APK path exists only after a successful build.
+        The first Android setup requires the Android
+        project and build dependencies to be configured.
+      </p>
+    </section>
 
-        function updateMetrics() {
-            document.getElementById("checkCount").textContent = checks;
-            document.getElementById("passCount").textContent = passed;
-            document.getElementById("warnCount").textContent = warnings;
-        }
+    <!-- GITHUB ACTIONS -->
+    <section class="build-card">
+      <h2>04 / GITHUB AUTOMATION</h2>
 
-        function setStatus(message, type = "success") {
-            statusText.textContent = message;
-            statusDot.className = "dot";
+      <p>
+        Add your Android workflow at:
+      </p>
 
-            if (type === "warning") {
-                statusDot.classList.add("warning");
-            } else if (type === "error") {
-                statusDot.classList.add("error");
-            }
-        }
+      <code class="build-code">.github/workflows/build-android.yml</code>
 
-        function renderFileRows(results = {}) {
-            fileList.replaceChildren();
+      <p>
+        Push your code to GitHub, open the repository's
+        Actions tab, select the Android build workflow,
+        and download the APK artifact from a successful run.
+      </p>
 
-            files.forEach(file => {
-                const row = document.createElement("div");
-                row.className = "file-row";
+      <a
+        class="build-link"
+        href="https://docs.github.com/en/actions"
+        target="_blank"
+        rel="noopener noreferrer">
+        GitHub Actions Guide
+      </a>
+    </section>
 
-                const name = document.createElement("span");
-                name.className = "file-name";
-                name.textContent = file;
+    <!-- API SECURITY -->
+    <section class="build-card">
+      <h2>05 / API CONFIGURATION</h2>
 
-                const state = document.createElement("span");
-                state.className = "file-state";
+      <div class="build-item">
+        <span class="build-icon">◇</span>
+        <div>
+          Open JARVIS Settings and enter your API endpoint,
+          model name and API key.
+        </div>
+      </div>
 
-                const result = results[file];
+      <div class="build-item">
+        <span class="build-icon">!</span>
+        <div>
+          <strong>Security notice</strong><br>
+          Never commit a real API key to a public GitHub
+          repository. For a public production app, keep
+          the provider key on a secure backend.
+        </div>
+      </div>
+    </section>
 
-                if (!result) {
-                    state.textContent = "NOT CHECKED";
-                } else if (result.ok) {
-                    state.textContent = "ACCESSIBLE";
-                    state.className += " success";
-                } else {
-                    state.textContent = result.status || "UNAVAILABLE";
-                    state.className += " warning-text";
-                }
+    <!-- MICROPHONE -->
+    <section class="build-card">
+      <h2>06 / VOICE SYSTEM</h2>
 
-                row.append(name, state);
-                fileList.appendChild(row);
-            });
-        }
+      <div class="build-item">
+        <span class="build-icon">🎙</span>
+        <div>
+          Allow microphone access when requested.
+          Speech recognition depends on browser or
+          Android WebView support.
+        </div>
+      </div>
 
-        async function checkFile(file) {
-            try {
-                const response = await fetch(
-                    new URL(file, window.location.href),
-                    { method: "HEAD", cache: "no-store" }
-                );
+      <div class="build-item">
+        <span class="build-icon">♫</span>
+        <div>
+          Text-to-speech uses the speech engine available
+          on your device.
+        </div>
+      </div>
+    </section>
 
-                // GitHub Pages and some servers may not support HEAD.
-                if (response.status === 405) {
-                    const fallback = await fetch(
-                        new URL(file, window.location.href),
-                        { method: "GET", cache: "no-store" }
-                    );
-                    return {
-                        ok: fallback.ok,
-                        status: fallback.ok
-                            ? "ACCESSIBLE"
-                            : "HTTP " + fallback.status
-                    };
-                }
+    <a class="back-link" href="../index.html">
+      ← Back to JARVIS Assistant
+    </a>
 
-                return {
-                    ok: response.ok,
-                    status: response.ok
-                        ? "ACCESSIBLE"
-                        : "HTTP " + response.status
-                };
-            } catch (error) {
-                return {
-                    ok: false,
-                    status: "FETCH BLOCKED"
-                };
-            }
-        }
+    <footer>
+      JARVIS AI • BUILD INFORMATION
+    </footer>
 
-        async function runChecks() {
-            const button = document.getElementById("runChecks");
-            button.disabled = true;
-            button.textContent = "CHECKING...";
-
-            checks = 0;
-            passed = 0;
-            warnings = 0;
-            updateMetrics();
-            renderFileRows();
-
-            setStatus("CHECKS RUNNING", "warning");
-            addLog("Starting project file accessibility checks.", "info");
-
-            const results = {};
-
-            for (const file of files) {
-                const result = await checkFile(file);
-                results[file] = result;
-                checks++;
-
-                if (result.ok) {
-                    passed++;
-                    addLog(file + " is accessible.", "success");
-                } else {
-                    warnings++;
-                    addLog(
-                        file + " could not be confirmed (" +
-                        result.status + ").",
-                        "warning-text"
-                    );
-                }
-
-                updateMetrics();
-                renderFileRows(results);
-            }
-
-            if (warnings === 0) {
-                setStatus("FILE CHECKS PASSED", "success");
-                addLog("All listed files responded successfully.", "success");
-            } else {
-                setStatus("CHECKS FINISHED WITH WARNINGS", "warning");
-                addLog(
-                    "Review unavailable files. A browser restriction can also block these checks.",
-                    "warning-text"
-                );
-            }
-
-            button.disabled = false;
-            button.textContent = "RUN FILE CHECKS";
-        }
-
-        function exportLog() {
-            const report = [
-                "J.A.R.V.I.S. BUILD / DIAGNOSTIC REPORT",
-                "Generated: " + new Date().toISOString(),
-                "Page: " + window.location.href,
-                "Checks completed: " + checks,
-                "Checks passed: " + passed,
-                "Warnings: " + warnings,
-                "",
-                "LOG ENTRIES",
-                ...logEntries.map(entry =>
-                    "[" + entry.time + "] " +
-                    entry.message
-                ),
-                "",
-                "SECURITY: API keys and secrets are not included in this report."
-            ].join("\n");
-
-            const blob = new Blob([report], {
-                type: "text/plain;charset=utf-8"
-            });
-
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = "jarvis-build-log.txt";
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
-
-            addLog("Diagnostic report export requested.", "success");
-        }
-
-        document.getElementById("runChecks")
-            .addEventListener("click", runChecks);
-
-        document.getElementById("exportLog")
-            .addEventListener("click", exportLog);
-
-        document.getElementById("clearLog")
-            .addEventListener("click", () => {
-                logEntries = [];
-                logList.replaceChildren();
-                addLog("Log cleared by user.", "info");
-            });
-
-        document.getElementById("openApp")
-            .addEventListener("click", () => {
-                window.location.href = new URL(
-                    "index.html",
-                    window.location.href
-                ).href;
-            });
-
-        renderFileRows();
-        addLog("Browser: " + navigator.userAgent, "info");
-        addLog("Current page loaded. Run file checks when ready.", "success");
-    })();
-    </script>
+  </main>
 </body>
- </html>
+</html>
