@@ -13,6 +13,47 @@
 </head>
 
 <body>
+
+ 
+<div id="apiSetupScreen" class="api-setup-screen">
+  <div class="api-setup-card">
+    <div class="api-logo">J</div>
+    <h1>JARVIS</h1>
+    <p>నీ AI Assistant‌ను ప్రారంభించు</p>
+
+    <label for="firstApiKey">API Key</label>
+    <input
+      id="firstApiKey"
+      type="password"
+      placeholder="నీ API Key ఇక్కడ పెట్టు"
+      autocomplete="off"
+      required
+    />
+
+    <label for="firstApiUrl">API URL</label>
+    <input
+      id="firstApiUrl"
+      type="url"
+      value="https://api.openai.com/v1/chat/completions"
+      required
+    />
+
+    <label for="firstModel">Model Name</label>
+    <input
+      id="firstModel"
+      type="text"
+      value="gpt-4o-mini"
+      required
+    />
+
+    <button id="startJarvisBtn" type="button">
+      Save & Start JARVIS
+    </button>
+
+    <p id="apiSetupError" role="alert"></p>
+  </div>
+</div>
+
   <main class="app">
 
     <!-- HEADER -->
