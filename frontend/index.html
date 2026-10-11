@@ -1,216 +1,309 @@
-
+ 
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#020817">
-  <meta name="description" content="JARVIS personal AI voice assistant">
-  <title>J.A.R.V.I.S. — Personal AI</title>
-
-  <link rel="manifest" href="./frontend/manifest.json">
-  <link rel="stylesheet" href="./frontend/style.css">
-
+  <meta name="theme-color" content="#030916">
+  <meta name="description" content="J.A.R.V.I.S. Personal AI Assistant">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="JARVIS">
+
+  <title>J.A.R.V.I.S — Personal AI</title>
+
+  <link rel="stylesheet" href="./style.css">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
 </head>
 
 <body>
-  <div class="app">
+  <div id="app" class="jarvis-app">
 
-    <!-- HEADER -->
+    <!-- TOP HEADER -->
     <header class="topbar">
-      <button class="round-button" id="settings-button"
-              aria-label="Open settings" title="Settings">⚙</button>
-
       <div class="brand">
-        <h1>J.A.R.V.I.S.</h1>
+        <div class="brand-name">J.A.R.V.I.S.</div>
         <div class="system-status">
-          <span class="status-dot"></span>
-          <span id="status">SYSTEM ONLINE</span>
+          <span class="status-dot" id="status-dot"></span>
+          <span id="system-status">SYSTEM ONLINE</span>
         </div>
       </div>
 
-      <button class="round-button" id="history-button"
-              aria-label="Conversation history" title="History">◷</button>
+      <div class="header-actions">
+        <button type="button" id="install-btn"
+          class="icon-button install-btn" hidden
+          aria-label="Install JARVIS">
+          <span aria-hidden="true">↓</span>
+          <span>Install</span>
+        </button>
+
+        <button type="button" id="settings-btn"
+          class="icon-button" aria-label="Open settings"
+          aria-controls="settings-panel">
+          ⚙
+        </button>
+
+        <button type="button" id="history-btn"
+          class="icon-button" aria-label="Open chat history"
+          aria-controls="history-panel">
+          ◷
+        </button>
+      </div>
     </header>
 
-    <!-- AI VISUAL -->
-    <main>
-      <section class="hero">
-        <div class="hero-label">PERSONAL ARTIFICIAL INTELLIGENCE</div>
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
 
-        <div class="hud" aria-label="JARVIS AI visual">
-          <div class="hud-ring ring-one"></div>
-          <div class="hud-ring ring-two"></div>
-          <div class="hud-ring ring-three"></div>
-          <div class="hud-ring ring-four"></div>
-          <div class="hud-ticks"></div>
+      <!-- JARVIS CORE -->
+      <section class="hero-section" aria-label="JARVIS AI core">
 
-          <div class="ai-face">
-            <div class="face-shine"></div>
-            <div class="eye eye-left"></div>
-            <div class="eye eye-right"></div>
-            <div class="face-mouth"></div>
+        <div class="hero-orb" id="jarvis-core-container">
+          <div class="orb-ring orb-ring-1"></div>
+          <div class="orb-ring orb-ring-2"></div>
+          <div class="orb-ring orb-ring-3"></div>
+          <div class="orb-ring orb-ring-4"></div>
+
+          <div class="orb-core">
+            <div class="robot-face" aria-hidden="true">
+              <span class="robot-eye left-eye"></span>
+              <span class="robot-eye right-eye"></span>
+            </div>
           </div>
 
-          <span class="hud-point point-one"></span>
-          <span class="hud-point point-two"></span>
-          <span class="hud-point point-three"></span>
-          <span class="hud-point point-four"></span>
-          <div class="scan-line"></div>
+          <div class="orb-crosshair"></div>
         </div>
 
-        <div class="hero-caption">
-          <span class="caption-line"></span>
-          <span>INTELLIGENCE • EVOLVED</span>
-          <span class="caption-line"></span>
-        </div>
+        <h1 id="hero-title">How can I help you?</h1>
+        <p class="hero-subtitle">Your personal AI assistant</p>
+
+        <p id="thinking-status" class="thinking-status"
+          role="status" aria-live="polite">
+          Ready to assist you.
+        </p>
       </section>
 
-      <!-- CAPABILITY CARDS -->
-      <section class="status-cards">
-        <button class="tech-card" id="voice-card" type="button">
-          <span class="card-icon">♩</span>
-          <span class="card-copy">
+      <!-- FEATURE CARDS -->
+      <section class="feature-grid" aria-label="Assistant features">
+        <button type="button" class="feature-card" id="voice-card">
+          <span class="feature-icon" aria-hidden="true">🎙</span>
+          <span class="feature-copy">
             <strong>VOICE ASSISTANT</strong>
-            <small>Tap to speak</small>
-            <small>or type a message</small>
+            <span>Tap to speak<br>or type a message</span>
           </span>
         </button>
 
-        <div class="tech-card" id="ai-card">
-          <span class="card-icon">✳</span>
-          <span class="card-copy">
+        <div class="feature-card feature-info">
+          <span class="feature-icon" aria-hidden="true">◎</span>
+          <span class="feature-copy">
             <strong>AI READY</strong>
-            <small id="ai-status">Awaiting configuration</small>
-            <small>Ready to assist</small>
+            <span>Connected &amp; ready<br>to help</span>
           </span>
         </div>
       </section>
 
       <!-- CHAT -->
-      <section class="conversation">
-        <div class="conversation-heading">
-          <div class="assistant-name">
-            <span class="chat-icon">●</span>
-            <strong>JARVIS</strong>
+      <section class="chat-section" aria-label="Conversation">
+        <div id="conversation-stage" class="conversation-stage">
+          <div id="chat" class="chat" role="log"
+            aria-live="polite" aria-relevant="additions">
+
+            <article class="message assistant-message">
+              <div class="message-heading">
+                <span class="message-avatar" aria-hidden="true">●</span>
+                <strong>JARVIS</strong>
+                <time class="message-time">Welcome</time>
+              </div>
+
+              <div class="message-content">
+                Hello! I'm JARVIS, your personal AI assistant.
+                How can I help you today?
+              </div>
+            </article>
+
           </div>
-          <button id="clear-chat" class="text-button" type="button">
-            CLEAR
+        </div>
+
+        <!-- IMAGE PREVIEW -->
+        <div id="image-preview-container" class="image-preview-container" hidden>
+          <img id="image-preview" alt="Selected image preview">
+          <button type="button" id="remove-image-btn"
+            class="remove-image-btn" aria-label="Remove selected image">
+            ×
           </button>
         </div>
 
-        <div id="messages" class="messages" aria-live="polite">
-          <div class="message assistant">
-            <span class="message-label">JARVIS</span>
-            Hello! I'm JARVIS, your personal AI assistant.
-            How can I help you today?
-          </div>
+        <!-- MESSAGE COMPOSER -->
+        <form id="chat-form" class="chat-composer">
+          <button type="button" id="attach-btn"
+            class="composer-icon" aria-label="Attach image">
+            ▧
+          </button>
+
+          <label class="visually-hidden" for="message-input">
+            Ask JARVIS anything
+          </label>
+
+          <textarea id="message-input" name="message"
+            placeholder="Ask JARVIS anything..."
+            rows="1" maxlength="10000"
+            autocomplete="off"></textarea>
+
+          <input type="file" id="img-input"
+            accept="image/*" hidden>
+
+          <button type="button" id="cam-btn"
+            class="composer-icon" aria-label="Take or select a photo">
+            📷
+          </button>
+
+          <button type="submit" id="send-btn"
+            class="send-button" aria-label="Send message">
+            ➤
+          </button>
+        </form>
+
+        <div class="composer-hint">
+          JARVIS AI can make mistakes. Verify important information.
         </div>
       </section>
 
-      <!-- MICROPHONE -->
-      <section class="voice-section">
-        <div class="voice-wave" aria-hidden="true">
+      <!-- VOICE CONTROL -->
+      <section class="voice-section" aria-label="Voice controls">
+        <div class="voice-visualizer" id="voice-visualizer"
+          aria-hidden="true">
           <span></span><span></span><span></span><span></span>
           <span></span><span></span><span></span><span></span>
-          <span></span><span></span><span></span><span></span>
-          <span></span><span></span><span></span><span></span>
-          <span></span>
+          <span></span><span></span><span></span>
         </div>
 
-        <button id="mic-button" class="mic-button" type="button"
-                aria-label="Start voice input">
-          <span class="mic-symbol">🎙</span>
+        <button type="button" id="mic-btn"
+          class="mic-button" aria-label="Start voice input"
+          aria-pressed="false">
+          <span class="mic-symbol" aria-hidden="true">🎙</span>
         </button>
 
-        <div id="mic-label">TAP TO SPEAK</div>
-      </section>
+        <div class="voice-actions">
+          <button type="button" id="read-answer-btn">
+            🔊 Read answer
+          </button>
 
-      <!-- MESSAGE INPUT -->
-      <form id="chat-form" class="composer">
-        <span class="input-icon" aria-hidden="true">▤</span>
-        <input
-          id="prompt"
-          name="prompt"
-          type="text"
-          placeholder="Ask JARVIS anything..."
-          autocomplete="off"
-          aria-label="Message JARVIS"
-          required
-        >
-        <button type="submit" class="send-button"
-                aria-label="Send message">➤</button>
-      </form>
-
-      <p class="privacy-note">
-        VOICE INPUT REQUIRES MICROPHONE PERMISSION
-      </p>
-    </main>
-
-    <!-- BOTTOM NAVIGATION -->
-    <nav class="bottom-nav" aria-label="Assistant controls">
-      <button type="button" id="nav-settings">
-        <span>⚙</span>
-        <small>Settings</small>
-      </button>
-
-      <button type="button" id="nav-voice">
-        <span>♩</span>
-        <small>Voice</small>
-      </button>
-
-      <button type="button" id="nav-history">
-        <span>◷</span>
-        <small>History</small>
-      </button>
-    </nav>
-
-    <footer>J.A.R.V.I.S. AI <span>•</span> PERSONAL ASSISTANT</footer>
-  </div>
-
-  <!-- SETTINGS -->
-  <dialog id="settings-dialog">
-    <div class="settings-content">
-      <div class="settings-header">
-        <div>
-          <p class="eyebrow">SYSTEM CONFIGURATION</p>
-          <h2>JARVIS Settings</h2>
-        </div>
-        <button type="button" id="close-settings"
-                class="round-button" aria-label="Close settings">✕</button>
-      </div>
-
-      <form id="settings-form">
-        <label for="api-key">AI API Key</label>
-        <input id="api-key" name="api-key" type="password"
-               placeholder="Enter your API key" autocomplete="off">
-
-        <p class="help-text">
-          For personal testing only. A key saved in a browser can be
-          accessed by someone using that device. Never publish your key.
-        </p>
-
-        <label for="api-url">API Endpoint</label>
-        <input id="api-url" name="api-url" type="url"
-               value="https://api.openai.com/v1/chat/completions"
-               placeholder="https://your-api-endpoint">
-
-        <label for="model">AI Model</label>
-        <input id="model" name="model" type="text"
-               value="gpt-4o-mini" placeholder="Model name">
-
-        <div class="settings-actions">
-          <button type="submit" class="primary-button">SAVE SETTINGS</button>
-          <button type="button" id="forget-key" class="danger-button">
-            FORGET KEY
+          <button type="button" id="stop-voice-btn">
+            ■ Stop voice
           </button>
         </div>
-      </form>
-    </div>
-  </dialog>
+      </section>
 
-  <script src="./frontend/script.js" defer></script>
+      <!-- BOTTOM NAVIGATION -->
+      <nav class="bottom-nav" aria-label="Main navigation">
+        <button type="button" id="nav-settings" class="nav-item">
+          <span aria-hidden="true">⚙</span>
+          <span>Settings</span>
+        </button>
+
+        <button type="button" id="nav-voice" class="nav-item">
+          <span aria-hidden="true">🎙</span>
+          <span>Voice</span>
+        </button>
+
+        <button type="button" id="nav-history" class="nav-item">
+          <span aria-hidden="true">◷</span>
+          <span>History</span>
+        </button>
+      </nav>
+    </main>
+
+    <!-- SETTINGS PANEL -->
+    <aside id="settings-panel" class="side-panel"
+      aria-label="JARVIS settings" hidden>
+      <div class="panel-header">
+        <h2>Settings</h2>
+        <button type="button" id="close-settings-btn"
+          class="icon-button" aria-label="Close settings">×</button>
+      </div>
+
+      <div class="panel-content">
+        <label for="api-key-input">Gemini API Key</label>
+        <input type="password" id="api-key-input"
+          placeholder="Enter your API key"
+          autocomplete="off">
+
+        <button type="button" id="save-api-key-btn">
+          Save API Key
+        </button>
+
+        <label for="theme-select">Appearance</label>
+        <select id="theme-select">
+          <option value="dark">Dark Neon</option>
+          <option value="light">Light</option>
+        </select>
+
+        <label for="language-select">Voice language</label>
+        <select id="language-select">
+          <option value="te-IN">Telugu</option>
+          <option value="en-IN">English (India)</option>
+          <option value="en-US">English (US)</option>
+          <option value="hi-IN">Hindi</option>
+        </select>
+
+        <label class="setting-toggle">
+          <input type="checkbox" id="voice-replies-toggle" checked>
+          <span>Speak AI replies</span>
+        </label>
+
+        <button type="button" id="clear-memory-btn"
+          class="danger-button">
+          Clear Memory
+        </button>
+
+        <p class="settings-note">
+          Keep your API key private. Do not share it with others.
+        </p>
+      </div>
+    </aside>
+
+    <!-- HISTORY PANEL -->
+    <aside id="history-panel" class="side-panel"
+      aria-label="Chat history" hidden>
+      <div class="panel-header">
+        <h2>Chat History</h2>
+        <button type="button" id="close-history-btn"
+          class="icon-button" aria-label="Close history">×</button>
+      </div>
+
+      <div class="panel-content">
+        <button type="button" id="new-chat-btn">＋ New Chat</button>
+        <div id="history-list" class="history-list">
+          <p class="empty-history">Your conversations will appear here.</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- NOTIFICATIONS -->
+    <div id="toast-container" class="toast-container"
+      role="status" aria-live="polite"></div>
+
+  </div>
+
+  <!-- Application logic -->
+  <script src="./script.js" defer></script>
+
+  <!-- PWA service worker -->
+  <script>
+    if ("serviceWorker" in navigator && location.protocol === "https:") {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("./sw.js")
+          .then(function (registration) {
+            console.log("JARVIS service worker registered:",
+              registration.scope);
+          })
+          .catch(function (error) {
+            console.error("Service worker registration failed:", error);
+          });
+      });
+    }
+  </script>
 </body>
 </html>
