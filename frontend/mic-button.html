@@ -1,190 +1,224 @@
-
+ 
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#050b14">
-  <title>JARVIS Voice Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#020812">
+  <title>JARVIS - Microphone Control</title>
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="./style.css">
+
+  <style>
+    .mic-page {
+      min-height: 75vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .mic-heading {
+      color: #58eaff;
+      font-family: Orbitron, sans-serif;
+      font-size: 23px;
+      margin-bottom: 10px;
+    }
+
+    .mic-description {
+      color: #8ca8ba;
+      font-size: 13px;
+      line-height: 1.6;
+      max-width: 300px;
+    }
+
+    .mic-glow {
+      width: 150px;
+      height: 150px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      border: 1px solid rgba(88, 234, 255, .65);
+      box-shadow: 0 0 25px #00cfff55, inset 0 0 30px #00cfff22;
+      margin: 28px 0;
+    }
+
+    #standalone-mic {
+      width: 108px;
+      height: 108px;
+      border: 1px solid #58eaff;
+      border-radius: 50%;
+      color: #eafaff;
+      background: radial-gradient(circle, #12506a, #03111e);
+      box-shadow: 0 0 22px #00cfff55;
+      font-size: 35px;
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+    }
+
+    #standalone-mic:active {
+      transform: scale(.94);
+    }
+
+    #standalone-mic.listening {
+      background: radial-gradient(circle, #7c2435, #190711);
+      border-color: #ff7185;
+      box-shadow: 0 0 30px #ff526788;
+      animation: mic-pulse 1.2s infinite;
+    }
+
+    #mic-status {
+      color: #58eaff;
+      font-family: Orbitron, sans-serif;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      margin: 12px 0;
+    }
+
+    #mic-result {
+      color: #eafaff;
+      font-size: 14px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+      max-width: 340px;
+      min-height: 24px;
+    }
+
+    .mic-back {
+      color: #58eaff;
+      text-decoration: none;
+      font-size: 13px;
+      margin-top: 25px;
+    }
+
+    @keyframes mic-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+  </style>
 </head>
 
 <body>
-  <main class="app-container">
-    <header class="top-bar">
-      <div class="brand-block">
-        <div class="brand-name">J.A.R.V.I.S.</div>
-        <div id="micSystemStatus" class="system-status">
-          VOICE SYSTEM READY
-        </div>
-      </div>
-    </header>
+  <main class="mic-page">
 
-    <section class="hero-section">
-      <div id="micHudOrb" class="hud-orb" aria-hidden="true">
-        <div class="orb-ring ring-one"></div>
-        <div class="orb-ring ring-two"></div>
-        <div class="orb-ring ring-three"></div>
-        <div class="orb-core">
-          <div class="core-diamond"></div>
-        </div>
-      </div>
+    <h1 class="mic-heading">J.A.R.V.I.S.</h1>
 
-      <h1>Voice Command</h1>
-      <p>Speak to your personal AI assistant</p>
+    <p class="mic-description">
+      Voice command interface. Tap the microphone
+      and speak when the system is ready.
+    </p>
 
-      <p id="micStatus" class="listening-status" aria-live="polite">
-        Tap the microphone to begin.
-      </p>
+    <div class="mic-glow">
+      <button
+        id="standalone-mic"
+        type="button"
+        aria-label="Start voice recognition"
+        aria-pressed="false">
+        🎙
+      </button>
+    </div>
 
-      <div class="voice-controls">
-        <button
-          id="startMic"
-          type="button"
-          class="control-button"
-          aria-pressed="false"
-        >
-          <span class="control-icon" aria-hidden="true">🎙️</span>
-          <span>Start Listening</span>
-        </button>
+    <div id="mic-status" role="status" aria-live="polite">
+      SYSTEM STANDBY
+    </div>
 
-        <button id="stopMic" type="button" class="control-button">
-          <span class="control-icon" aria-hidden="true">■</span>
-          <span>Stop Listening</span>
-        </button>
-      </div>
-    </section>
+    <p id="mic-result" aria-live="polite">
+      Your recognized speech will appear here.
+    </p>
 
-    <section class="chat-section">
-      <label for="recognizedText">Recognized speech</label>
-      <div class="chat-form">
-        <textarea
-          id="recognizedText"
-          rows="3"
-          placeholder="Your spoken words will appear here..."
-          readonly
-        ></textarea>
-      </div>
+    <a class="mic-back" href="../index.html">
+      ← Back to JARVIS
+    </a>
 
-      <p class="footer-note">
-        MICROPHONE PERMISSION REQUIRED
-      </p>
-    </section>
   </main>
 
   <script>
     (() => {
-      const startButton = document.getElementById("startMic");
-      const stopButton = document.getElementById("stopMic");
-      const status = document.getElementById("micStatus");
-      const systemStatus = document.getElementById("micSystemStatus");
-      const output = document.getElementById("recognizedText");
-      const orb = document.getElementById("micHudOrb");
+      const button = document.getElementById("standalone-mic");
+      const status = document.getElementById("mic-status");
+      const result = document.getElementById("mic-result");
 
       const SpeechRecognition =
         window.SpeechRecognition ||
         window.webkitSpeechRecognition;
 
       let recognition = null;
-      let isListening = false;
+      let listening = false;
 
-      function setStatus(title, message, active = false) {
-        systemStatus.textContent = title;
-        status.textContent = message;
-
-        orb.classList.toggle("listening", active);
-        startButton.setAttribute(
-          "aria-pressed",
-          String(active)
+      function setListening(active) {
+        listening = active;
+        button.classList.toggle("listening", active);
+        button.setAttribute("aria-pressed", String(active));
+        button.setAttribute(
+          "aria-label",
+          active ? "Stop voice recognition" : "Start voice recognition"
         );
       }
 
-      function stopListening() {
-        if (recognition && isListening) {
-          recognition.stop();
-        }
-
-        isListening = false;
-        setStatus("VOICE SYSTEM READY", "Listening stopped.");
+      if (!SpeechRecognition) {
+        status.textContent = "VOICE RECOGNITION UNSUPPORTED";
+        result.textContent =
+          "This browser does not support speech recognition. " +
+          "Try a compatible browser or use the main JARVIS chat.";
+        button.addEventListener("click", () => {
+          status.textContent = "UNSUPPORTED";
+        });
+        return;
       }
 
-      startButton.addEventListener("click", () => {
-        if (!SpeechRecognition) {
-          setStatus(
-            "VOICE UNAVAILABLE",
-            "This browser does not support speech recognition. Try a compatible browser."
-          );
+      recognition = new SpeechRecognition();
+      recognition.lang = navigator.language || "en-US";
+      recognition.interimResults = true;
+      recognition.continuous = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setListening(true);
+        status.textContent = "LISTENING...";
+        result.textContent = "Speak now...";
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+
+        result.textContent = transcript;
+      };
+
+      recognition.onerror = (event) => {
+        status.textContent = "VOICE INPUT ERROR";
+        result.textContent =
+          "Error: " + event.error +
+          ". Check microphone permission and try again.";
+      };
+
+      recognition.onend = () => {
+        setListening(false);
+
+        if (status.textContent === "LISTENING...") {
+          status.textContent = "SYSTEM STANDBY";
+        }
+      };
+
+      button.addEventListener("click", () => {
+        if (listening) {
+          recognition.stop();
           return;
         }
 
-        if (isListening) return;
-
-        recognition = new SpeechRecognition();
-        recognition.lang = "te-IN";
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
-
-        recognition.onstart = () => {
-          isListening = true;
-          setStatus(
-            "LISTENING",
-            "Listening now. Speak clearly.",
-            true
-          );
-        };
-
-        recognition.onresult = (event) => {
-          let transcript = "";
-
-          for (
-            let i = event.resultIndex;
-            i < event.results.length;
-            i++
-          ) {
-            transcript += event.results[i][0].transcript;
-          }
-
-          output.value = transcript.trim();
-        };
-
-        recognition.onerror = (event) => {
-          const message = event.error === "not-allowed"
-            ? "Microphone permission denied. Allow microphone access in your browser."
-            : "Speech recognition error: " + event.error;
-
-          setStatus("VOICE ERROR", message);
-        };
-
-        recognition.onend = () => {
-          isListening = false;
-
-          if (orb) orb.classList.remove("listening");
-
-          startButton.setAttribute("aria-pressed", "false");
-
-          if (systemStatus.textContent === "LISTENING") {
-            setStatus(
-              "VOICE SYSTEM READY",
-              output.value
-                ? "Speech captured."
-                : "No speech captured. Try again."
-            );
-          }
-        };
-
         try {
           recognition.start();
-        } catch {
-          setStatus(
-            "VOICE ERROR",
-            "Could not start the microphone. Try again."
-          );
+        } catch (error) {
+          status.textContent = "PLEASE TRY AGAIN";
+          result.textContent =
+            "Voice input could not start. Check permissions and retry.";
         }
       });
-
-      stopButton.addEventListener("click", stopListening);
     })();
   </script>
 </body>
