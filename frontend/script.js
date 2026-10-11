@@ -1,19 +1,17 @@
- 
+
 "use strict";
 
 /* =========================================
-   J.A.R.V.I.S — Main JavaScript
-   API key save/load + Gemini + UI features
+   J.A.R.V.I.S — Complete Main JavaScript
+   Chat • Gemini • Settings • Voice • Images
+   Weather • Timer • YouTube • History
    ========================================= */
 
 const $ = (id) => document.getElementById(id);
 
 const JARVIS = {
   model: "gemini-2.5-flash",
-  models: [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash"
-  ],
+  models: ["gemini-2.5-flash", "gemini-2.0-flash"],
   keys: {
     api: "jarvis_key",
     memory: "jarvis_memory",
@@ -33,6 +31,9 @@ let isListening = false;
 let isBusy = false;
 let timerHandle = null;
 let currentUtterance = null;
+let eventsBound = false;
+
+/* ---------- STORAGE ---------- */
 
 function safeGet(key, fallback = null) {
   try {
@@ -46,11 +47,10 @@ function safeGet(key, fallback = null) {
 
 function safeSet(key, value) {
   try {
-    localStorage.setItem(key, value);
+    localStorage.setItem(key, String(value));
     return localStorage.getItem(key) === String(value);
   } catch (error) {
     console.error("Storage write error:", error);
-    toast("Unable to save. Check browser storage settings.");
     return false;
   }
 }
@@ -63,6 +63,8 @@ function safeJSON(key, fallback) {
   }
 }
 
+/* ---------- NOTIFICATIONS / STATUS ---------- */
+
 function toast(message) {
   console.log("[JARVIS]", message);
 
@@ -71,22 +73,24 @@ function toast(message) {
   if (!el) {
     el = document.createElement("div");
     el.id = "jarvis-toast";
+
     Object.assign(el.style, {
       position: "fixed",
       bottom: "22px",
       left: "50%",
       transform: "translateX(-50%)",
-      zIndex: "99999",
+      zIndex: "999999",
       maxWidth: "90%",
       padding: "12px 18px",
       borderRadius: "10px",
       background: "#151a24",
-      color: "#ffffff",
+      color: "#fff",
       border: "1px solid #79c9ff",
       boxShadow: "0 0 18px #79c9ff33",
       fontSize: "14px",
       textAlign: "center"
     });
+
     document.body.appendChild(el);
   }
 
@@ -96,12 +100,13 @@ function toast(message) {
   clearTimeout(el._hideTimer);
   el._hideTimer = setTimeout(() => {
     el.style.display = "none";
-  }, 3500);
+  }, 4500);
 }
 
 function setStatus(message, type = "ready") {
   const status = $("system-status");
   const dot = $("status-dot");
+  const thinking = $("thinking-status");
 
   if (status) status.textContent = message;
 
@@ -111,7 +116,6 @@ function setStatus(message, type = "ready") {
       type === "busy" ? "#ffc857" : "#54e39b";
   }
 
-  const thinking = $("thinking-status");
   if (thinking) {
     thinking.textContent = type === "busy" ? message : "";
   }
@@ -129,33 +133,34 @@ function setBusy(value) {
   );
 }
 
+/* ---------- API KEY ---------- */
+
 function getApiKey() {
   return safeGet(JARVIS.keys.api, "") || "";
 }
 
-/* =========================================
-   GEMINI API KEY: LOAD / SAVE / TEST
-   ========================================= */
-
 function loadApiKey() {
-  const key = getApiKey();
   const input = $("api-key-input");
+  const key = getApiKey();
 
-  if (input && key) input.value = key;
-
+  if (input) input.value = key;
   return key;
 }
+
+/* ---------- GEMINI API ---------- */
 
 async function requestGemini(contents, apiKey, maxOutputTokens = 1024) {
   if (!apiKey) {
     throw new Error("Enter your Gemini API key in Settings.");
   }
 
-  let lastError;
+  let lastError = null;
 
   for (const model of JARVIS.models) {
+    let response;
+
     try {
-      const response = await fetch(
+      response = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/" +
           encodeURIComponent(model) +
           ":generateContent",
@@ -182,122 +187,144 @@ async function requestGemini(contents, apiKey, maxOutputTokens = 1024) {
           })
         }
       );
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        const detail =
-          data?.error?.message ||
-          `HTTP ${response.status}`;
-
-        // Try the next configured model for model availability errors.
-        if (
-          response.status === 404 ||
-          (response.status === 400 &&
-            /model|not found|not supported/i.test(detail))
-        ) {
-          lastError = new Error(detail);
-          continue;
-        }
-
-        throw new Error(detail);
-      }
-
-      const answer = data?.candidates?.[0]?.content?.parts
-        ?.map(part => part.text || "")
-        .join("")
-        .trim();
-
-      if (!answer) {
-        throw new Error(
-          data?.promptFeedback?.blockReason
-            ? "The request was blocked: " + data.promptFeedback.blockReason
-            : "Gemini returned an empty response."
-        );
-      }
-
-      JARVIS.model = model;
-      return answer;
     } catch (error) {
-      lastError = error;
+      throw new Error(
+        "Network request failed. Check internet and reload the page."
+      );
+    }
+
+    let data = {};
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error("Gemini returned an unreadable response.");
+    }
+
+    if (!response.ok) {
+      const detail = data?.error?.message || `HTTP ${response.status}`;
+      lastError = new Error(detail);
 
       if (
-        error instanceof TypeError ||
-        /failed to fetch|network/i.test(error.message || "")
+        response.status === 404 ||
+        (response.status === 400 &&
+          /model|not found|not supported/i.test(detail))
       ) {
+        continue;
+      }
+
+      if (response.status === 401 || response.status === 403) {
         throw new Error(
-          "Network error. Check your internet connection and try again."
+          "Gemini rejected the API key or its permissions. Check the key and API access."
         );
       }
 
-      if (
-        !/404|model|not found|not supported/i.test(error.message || "")
-      ) {
-        throw error;
+      if (response.status === 429) {
+        throw new Error(
+          "Gemini request limit reached. Wait a little and try again."
+        );
       }
+
+      throw new Error(detail);
     }
+
+    const answer = data?.candidates?.[0]?.content?.parts
+      ?.map(part => part.text || "")
+      .join("")
+      .trim();
+
+    if (!answer) {
+      throw new Error(
+        data?.promptFeedback?.blockReason
+          ? "Request blocked: " + data.promptFeedback.blockReason
+          : "Gemini returned an empty answer."
+      );
+    }
+
+    JARVIS.model = model;
+    return answer;
   }
 
   throw new Error(
-    "No configured Gemini model is available for this API key. " +
-    (lastError?.message || "Check the model name and API key permissions.")
+    "No configured Gemini model worked. Check the available model names and API access. " +
+    (lastError?.message || "")
   );
 }
 
+/* Save the key independently of the connection test. */
 async function saveSettings() {
   const input = $("api-key-input");
   const button = $("save-api-key-btn");
 
   if (!input) {
-    toast("API key input field was not found. Check your HTML ID.");
+    toast("API Key input not found. Check the HTML ID api-key-input.");
     return;
   }
 
   const key = input.value.trim();
 
   if (!key) {
-    toast("Please enter your Gemini API key.");
+    toast("Please enter your Gemini API Key.");
     input.focus();
     return;
   }
 
   if (/\s/.test(key)) {
-    toast("The API key contains spaces. Please check it.");
+    toast("The API Key contains spaces. Please check it.");
     input.focus();
     return;
   }
 
-  if (button) button.disabled = true;
+  const oldText = button?.textContent || "Save API Key";
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Saving...";
+  }
 
   try {
-    // Save first so the user's key isn't lost if the test fails.
-    if (!safeSet(JARVIS.keys.api, key)) {
-      throw new Error("The browser could not save the API key.");
+    if (!safeSet(JARVIS.keys.api, key) || getApiKey() !== key) {
+      throw new Error("The browser could not save the API Key.");
     }
 
-    toast("API key saved. Testing Gemini connection...");
+    toast("API Key saved. Testing Gemini connection...");
 
-    await requestGemini(
-      [{ role: "user", parts: [{ text: "Reply with OK." }] }],
-      key,
-      32
-    );
+    try {
+      await requestGemini(
+        [{ role: "user", parts: [{ text: "Reply with OK." }] }],
+        key,
+        32
+      );
 
-    toast("Gemini connected successfully!");
-    setStatus("Connected to Gemini.");
+      setStatus("Connected to Gemini.");
+      toast("API Key saved and Gemini connected!");
 
-    const panel = $("settings-panel");
-    if (panel) panel.classList.remove("active", "open");
+      const prompt = $("api-key-prompt");
+      if (prompt) prompt.style.display = "none";
 
-    const keyPrompt = $("api-key-prompt");
-    if (keyPrompt) keyPrompt.style.display = "none";
+      closePanel("settings-panel");
+    } catch (apiError) {
+      console.error("Gemini test failed:", apiError);
+
+      setStatus("API Key saved; connection failed.", "error");
+      toast("Key saved, but Gemini test failed: " + apiError.message);
+    }
   } catch (error) {
-    // Keep the key saved even if the API test fails.
-    setStatus("Gemini connection failed.", "error");
-    toast("Key saved, but connection test failed: " + error.message);
+    console.error("API Key save failed:", error);
+    toast(error.message);
   } finally {
-    if (button) button.disabled = false;
+    if (button) {
+      button.disabled = false;
+      button.textContent = oldText;
+    }
   }
+}
+
+/* ---------- SETTINGS / THEME ---------- */
+
+function applyTheme(theme) {
+  const validTheme = theme === "light" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", validTheme);
+  safeSet(JARVIS.keys.theme, validTheme);
 }
 
 function initSettings() {
@@ -314,30 +341,32 @@ function initSettings() {
 
   if (languageSelect) languageSelect.value = language;
 
-  const voiceEnabled = safeGet(JARVIS.keys.voice, "true") !== "false";
   const voiceToggle = $("voice-replies-toggle");
-
-  if (voiceToggle) voiceToggle.checked = voiceEnabled;
+  if (voiceToggle) {
+    voiceToggle.checked = safeGet(JARVIS.keys.voice, "true") !== "false";
+  }
 
   if (!getApiKey()) {
     const panel = $("settings-panel");
-    if (panel) panel.classList.add("active", "open");
-
-    const input = $("api-key-input");
-    if (input) input.focus();
-
-    toast("Add your Gemini API key in Settings to enable AI chat.");
+    if (panel) {
+      panel.hidden = false;
+      panel.classList.add("active", "open");
+    }
+    $("api-key-input")?.focus();
   }
 }
 
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  safeSet(JARVIS.keys.theme, theme);
+function closePanel(id) {
+  const panel = $(id);
+  if (!panel) return;
+
+  panel.classList.remove("active", "open");
+
+  // Remove hidden only if your CSS uses classes to control panel visibility.
+  if (panel.hasAttribute("hidden")) panel.hidden = true;
 }
 
-/* =========================================
-   CONVERSATION HISTORY
-   ========================================= */
+/* ---------- CONVERSATION HISTORY ---------- */
 
 function saveConversations() {
   safeSet(JARVIS.keys.history, JSON.stringify(conversations));
@@ -349,7 +378,7 @@ function saveConversations() {
 
 function newConversation() {
   activeConversation = {
-    id: String(Date.now()),
+    id: String(Date.now()) + Math.random().toString(36).slice(2, 7),
     title: "New conversation",
     messages: [],
     updatedAt: Date.now()
@@ -357,6 +386,7 @@ function newConversation() {
 
   conversations.unshift(activeConversation);
   conversations = conversations.slice(0, 30);
+
   saveConversations();
   renderChat();
   renderHistory();
@@ -364,8 +394,12 @@ function newConversation() {
 
 function loadConversations() {
   const stored = safeJSON(JARVIS.keys.history, []);
-
   conversations = Array.isArray(stored) ? stored : [];
+
+  // Repair malformed stored conversations.
+  conversations = conversations.filter(
+    c => c && typeof c.id === "string" && Array.isArray(c.messages)
+  );
 
   const activeId = safeGet(JARVIS.keys.active, "");
 
@@ -381,7 +415,6 @@ function loadConversations() {
       messages: [],
       updatedAt: Date.now()
     };
-
     conversations = [activeConversation];
   }
 
@@ -424,17 +457,15 @@ function renderChat() {
 
   chat.replaceChildren();
 
-  const messages = activeConversation?.messages || [];
-
-  for (const message of messages) {
+  for (const message of activeConversation?.messages || []) {
     const wrapper = document.createElement("div");
     wrapper.className =
-      "message " + (message.role === "user" ? "user-message" : "assistant-message");
+      "message " +
+      (message.role === "user" ? "user-message" : "assistant-message");
 
     const content = document.createElement("div");
     content.className = "message-content";
     content.textContent = message.text || "";
-
     wrapper.appendChild(content);
 
     if (message.image) {
@@ -464,11 +495,14 @@ function renderHistory() {
     item.type = "button";
     item.className = "history-item";
     item.textContent = conversation.title || "Conversation";
+
     item.addEventListener("click", () => {
       activeConversation = conversation;
       saveConversations();
       renderChat();
+      closePanel("history-panel");
     });
+
     list.appendChild(item);
   }
 }
@@ -484,23 +518,21 @@ function clearMemory() {
     localStorage.removeItem(JARVIS.keys.active);
     localStorage.removeItem(JARVIS.keys.memory);
   } catch (error) {
-    console.error(error);
+    console.error("Clear memory error:", error);
   }
 
   newConversation();
   toast("Conversation history cleared.");
 }
 
-/* =========================================
-   CHAT AND IMAGE REQUESTS
-   ========================================= */
+/* ---------- IMAGE SUPPORT ---------- */
 
 function imageToGeminiPart(dataUrl) {
-  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  const match = dataUrl.match(
+    /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/
+  );
 
-  if (!match) {
-    throw new Error("Unsupported image format.");
-  }
+  if (!match) throw new Error("Unsupported image format.");
 
   return {
     inlineData: {
@@ -510,14 +542,63 @@ function imageToGeminiPart(dataUrl) {
   };
 }
 
+function showImagePreview(dataUrl) {
+  pendingImage = dataUrl;
+
+  const image = $("image-preview");
+  const container = $("image-preview-container");
+
+  if (image) image.src = dataUrl;
+  if (container) container.style.display = "block";
+}
+
+function handleImageFile(file) {
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    toast("Please select an image file.");
+    return;
+  }
+
+  if (file.size > 8 * 1024 * 1024) {
+    toast("Image is too large. Choose an image under 8 MB.");
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = () => showImagePreview(String(reader.result));
+  reader.onerror = () => toast("Could not read the selected image.");
+
+  reader.readAsDataURL(file);
+}
+
+function openCamera() {
+  const input = $("img-input");
+
+  if (!input) {
+    toast("Image upload input was not found.");
+    return;
+  }
+
+  input.accept = "image/*";
+  input.setAttribute("capture", "environment");
+  input.click();
+}
+
+/* ---------- CHAT / GEMINI ---------- */
+
 async function askGemini(userText, imageData = null) {
   const key = getApiKey();
 
   if (!key) {
-    toast("Enter and save your Gemini API key in Settings first.");
+    toast("Enter and save your Gemini API Key in Settings.");
     const panel = $("settings-panel");
-    if (panel) panel.classList.add("active", "open");
-    return;
+    if (panel) {
+      panel.hidden = false;
+      panel.classList.add("active", "open");
+    }
+    return null;
   }
 
   const history = (activeConversation?.messages || [])
@@ -525,26 +606,24 @@ async function askGemini(userText, imageData = null) {
     .filter(m => m.role === "user" || m.role === "assistant")
     .map(m => ({
       role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.text || "" }]
+      parts: m.text ? [{ text: m.text }] : []
     }))
-    .filter(m => m.parts[0].text);
+    .filter(m => m.parts.length > 0);
 
   const currentParts = [];
 
   if (userText) currentParts.push({ text: userText });
-
-  if (imageData) {
-    currentParts.push(imageToGeminiPart(imageData));
-  }
+  if (imageData) currentParts.push(imageToGeminiPart(imageData));
 
   if (!currentParts.length) {
     currentParts.push({ text: "Please describe this image." });
   }
 
-  // The latest user message was already saved to conversation history.
-  // Replace its text-only version with the image part when needed.
+  // The latest user message was saved before this request.
+  // Replace its text-only entry with the image parts when needed.
   if (imageData && history.length) {
     const last = history[history.length - 1];
+
     if (last.role === "user" && last.parts[0]?.text === userText) {
       history.pop();
     }
@@ -564,17 +643,22 @@ async function sendMessage() {
   if (!text && !pendingImage) return;
 
   const image = pendingImage;
-
   if (input) input.value = "";
 
   pendingImage = null;
 
-  const previewContainer = $("image-preview-container");
-  if (previewContainer) previewContainer.style.display = "none";
+  const preview = $("image-preview-container");
+  if (preview) preview.style.display = "none";
 
   addMessage("user", text || "Please analyze this image.", image);
 
-  if (await handleCommand(text)) return;
+  try {
+    if (await handleCommand(text)) return;
+  } catch (error) {
+    console.error("Command error:", error);
+    addMessage("assistant", "Command failed: " + error.message);
+    return;
+  }
 
   setBusy(true);
 
@@ -590,16 +674,17 @@ async function sendMessage() {
     }
   } catch (error) {
     console.error("Gemini error:", error);
-    addMessage("assistant", "Sorry, I couldn't complete that request. " + error.message);
+    addMessage(
+      "assistant",
+      "Sorry, I couldn't complete that request. " + error.message
+    );
     toast(error.message || "Request failed.");
   } finally {
     setBusy(false);
   }
 }
 
-/* =========================================
-   COMMANDS
-   ========================================= */
+/* ---------- LOCAL COMMANDS ---------- */
 
 async function handleCommand(rawText) {
   const text = String(rawText || "").trim().toLowerCase();
@@ -612,25 +697,31 @@ async function handleCommand(rawText) {
 
   if (/\b(time|current time|what time)\b/.test(text) ||
       /సమయం ఎంత/.test(text)) {
-    addMessage("assistant", "Current time: " +
+    addMessage(
+      "assistant",
+      "Current time: " +
       new Intl.DateTimeFormat("en-IN", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
         timeZone: "Asia/Kolkata"
-      }).format(new Date()) + " (India)");
+      }).format(new Date()) + " (India)"
+    );
     return true;
   }
 
   if (/\b(today's date|what date|current date)\b/.test(text) ||
       /ఈరోజు తేదీ/.test(text)) {
-    addMessage("assistant", "Today's date: " +
+    addMessage(
+      "assistant",
+      "Today's date: " +
       new Intl.DateTimeFormat("en-IN", {
         day: "numeric",
         month: "long",
         year: "numeric",
         timeZone: "Asia/Kolkata"
-      }).format(new Date()));
+      }).format(new Date())
+    );
     return true;
   }
 
@@ -640,6 +731,7 @@ async function handleCommand(rawText) {
       "Why was the math book sad? It had too many problems.",
       "Why do programmers prefer dark mode? Because light attracts bugs!"
     ];
+
     addMessage("assistant", jokes[Math.floor(Math.random() * jokes.length)]);
     return true;
   }
@@ -668,8 +760,6 @@ async function handleCommand(rawText) {
       unit.startsWith("hour") || unit.startsWith("hr") ? 3600000 :
       unit.startsWith("min") ? 60000 : 1000;
 
-    const duration = amount * multiplier;
-
     if (timerHandle) clearTimeout(timerHandle);
 
     addMessage("assistant", `Timer set for ${amount} ${unit}.`);
@@ -679,7 +769,7 @@ async function handleCommand(rawText) {
       addMessage("assistant", "Your timer is complete!");
       speak("Your timer is complete.");
       timerHandle = null;
-    }, duration);
+    }, amount * multiplier);
 
     return true;
   }
@@ -700,9 +790,7 @@ async function handleCommand(rawText) {
   }
 
   if (/^(open|search|google)\b/.test(text)) {
-    const query = text
-      .replace(/^(open|search|google)\s*/i, "")
-      .trim();
+    const query = text.replace(/^(open|search|google)\s*/i, "").trim();
 
     if (query) {
       window.open(
@@ -710,13 +798,13 @@ async function handleCommand(rawText) {
         "_blank",
         "noopener,noreferrer"
       );
+
       addMessage("assistant", "Searching Google for: " + query);
       return true;
     }
   }
 
-  if (/\b(weather|temperature)\b/.test(text) ||
-      /వాతావరణం/.test(text)) {
+  if (/\b(weather|temperature)\b/.test(text) || /వాతావరణం/.test(text)) {
     const placeMatch = rawText.match(
       /(?:weather|temperature|వాతావరణం)(?:\s+(?:in|at|for))?\s+(.+)/i
     );
@@ -740,7 +828,7 @@ async function handleCommand(rawText) {
       const location = geo.results?.[0];
 
       if (!location) {
-        addMessage("assistant", "I couldn't find that city. Please check its spelling.");
+        addMessage("assistant", "I couldn't find that city. Check its spelling.");
         return true;
       }
 
@@ -762,7 +850,7 @@ async function handleCommand(rawText) {
         `Wind: ${weather.wind_speed_10m} km/h.`
       );
     } catch (error) {
-      addMessage("assistant", "Unable to get weather right now: " + error.message);
+      addMessage("assistant", "Unable to get weather: " + error.message);
     }
 
     return true;
@@ -770,7 +858,11 @@ async function handleCommand(rawText) {
 
   if (/\b(settings|open settings)\b/.test(text) || /సెట్టింగ్స్/.test(text)) {
     const panel = $("settings-panel");
-    if (panel) panel.classList.add("active", "open");
+    if (panel) {
+      panel.hidden = false;
+      panel.classList.add("active", "open");
+    }
+
     addMessage("assistant", "Settings opened.");
     return true;
   }
@@ -784,9 +876,7 @@ async function handleCommand(rawText) {
   return false;
 }
 
-/* =========================================
-   VOICE INPUT / TEXT TO SPEECH
-   ========================================= */
+/* ---------- VOICE INPUT ---------- */
 
 function startVoiceInput() {
   const SpeechRecognition =
@@ -818,10 +908,8 @@ function startVoiceInput() {
 
     if (input) {
       input.value = transcript;
-      input.focus();
+      sendMessage();
     }
-
-    sendMessage();
   };
 
   recognition.onerror = (event) => {
@@ -832,7 +920,11 @@ function startVoiceInput() {
     isListening = false;
   };
 
-  recognition.start();
+  try {
+    recognition.start();
+  } catch (error) {
+    toast("Could not start voice input: " + error.message);
+  }
 }
 
 function speak(text) {
@@ -852,71 +944,15 @@ function speak(text) {
 function stopVoice() {
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
 
-  if (recognition && isListening) {
-    recognition.stop();
-  }
+  if (recognition && isListening) recognition.stop();
 }
 
-/* =========================================
-   IMAGE UPLOAD / CAMERA
-   ========================================= */
-
-function showImagePreview(dataUrl) {
-  pendingImage = dataUrl;
-
-  const image = $("image-preview");
-  const container = $("image-preview-container");
-
-  if (image) image.src = dataUrl;
-  if (container) container.style.display = "block";
-}
-
-function handleImageFile(file) {
-  if (!file) return;
-
-  if (!file.type.startsWith("image/")) {
-    toast("Please select an image file.");
-    return;
-  }
-
-  if (file.size > 8 * 1024 * 1024) {
-    toast("Image is too large. Please choose an image under 8 MB.");
-    return;
-  }
-
-  const reader = new FileReader();
-
-  reader.onload = () => {
-    showImagePreview(String(reader.result));
-  };
-
-  reader.onerror = () => toast("Could not read the selected image.");
-  reader.readAsDataURL(file);
-}
-
-function openCamera() {
-  const input = $("img-input");
-
-  if (input) {
-    input.accept = "image/*";
-    input.setAttribute("capture", "environment");
-    input.click();
-  } else {
-    toast("Image upload input was not found.");
-  }
-}
-
-/* =========================================
-   PANELS / EVENTS / INITIALIZATION
-   ========================================= */
-
-function closePanel(id) {
-  const panel = $(id);
-  if (panel) panel.classList.remove("active", "open");
-}
+/* ---------- EVENT BINDINGS ---------- */
 
 function bindEvents() {
-  // API key save button — essential fix.
+  if (eventsBound) return;
+  eventsBound = true;
+
   $("save-api-key-btn")?.addEventListener("click", saveSettings);
 
   $("chat-form")?.addEventListener("submit", (event) => {
@@ -925,7 +961,6 @@ function bindEvents() {
   });
 
   $("send-btn")?.addEventListener("click", (event) => {
-    // If the button belongs to chat-form, submit handler handles it.
     if ($("chat-form")) return;
     event.preventDefault();
     sendMessage();
@@ -941,6 +976,7 @@ function bindEvents() {
   $("mic-btn")?.addEventListener("click", startVoiceInput);
   $("nav-voice")?.addEventListener("click", startVoiceInput);
   $("stop-voice-btn")?.addEventListener("click", stopVoice);
+
   $("read-answer-btn")?.addEventListener("click", () => {
     const last = [...(activeConversation?.messages || [])]
       .reverse()
@@ -953,8 +989,7 @@ function bindEvents() {
   $("cam-btn")?.addEventListener("click", openCamera);
 
   $("img-input")?.addEventListener("change", (event) => {
-    const file = event.target.files?.[0];
-    handleImageFile(file);
+    handleImageFile(event.target.files?.[0]);
     event.target.value = "";
   });
 
@@ -993,7 +1028,7 @@ function bindEvents() {
       await window.deferredPrompt.userChoice;
       window.deferredPrompt = null;
     } else {
-      toast("Install option is available only when the app meets browser install requirements.");
+      toast("Install is available when browser install requirements are met.");
     }
   });
 
@@ -1010,6 +1045,8 @@ window.addEventListener("beforeinstallprompt", (event) => {
   window.deferredPrompt = event;
 });
 
+/* ---------- INITIALIZATION ---------- */
+
 function initJarvis() {
   initSettings();
   loadConversations();
@@ -1017,17 +1054,19 @@ function initJarvis() {
 
   setStatus("Ready to assist you.");
 
-  // If no API key exists, open Settings and focus the key field.
   if (!getApiKey()) {
     const panel = $("settings-panel");
-    if (panel) panel.classList.add("active", "open");
+    if (panel) {
+      panel.hidden = false;
+      panel.classList.add("active", "open");
+    }
   }
 
   console.log("J.A.R.V.I.S initialized.");
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initJarvis);
+  document.addEventListener("DOMContentLoaded", initJarvis, { once: true });
 } else {
   initJarvis();
 }
