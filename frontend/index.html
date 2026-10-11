@@ -3,210 +3,214 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1, viewport-fit=cover">
-
-  <meta name="theme-color" content="#020812">
-  <meta name="description"
-        content="JARVIS AI Personal Voice Assistant">
-
-  <title>JARVIS AI Assistant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#020817">
+  <meta name="description" content="JARVIS personal AI voice assistant">
+  <title>J.A.R.V.I.S. — Personal AI</title>
 
   <link rel="manifest" href="./frontend/manifest.json">
   <link rel="stylesheet" href="./frontend/style.css">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 </head>
 
 <body>
-  <main class="app-shell">
+  <div class="app">
 
     <!-- HEADER -->
     <header class="topbar">
+      <button class="round-button" id="settings-button"
+              aria-label="Open settings" title="Settings">⚙</button>
+
       <div class="brand">
-        <span class="brand-dot"></span>
-        <div>
-          <strong>J.A.R.V.I.S.</strong>
-          <small>PERSONAL AI SYSTEM</small>
+        <h1>J.A.R.V.I.S.</h1>
+        <div class="system-status">
+          <span class="status-dot"></span>
+          <span id="status">SYSTEM ONLINE</span>
         </div>
       </div>
 
-      <button
-        id="settings-button"
-        class="icon-button"
-        type="button"
-        aria-label="Open settings">
-        ⚙
-      </button>
+      <button class="round-button" id="history-button"
+              aria-label="Conversation history" title="History">◷</button>
     </header>
 
-    <!-- AI ASSISTANT DISPLAY -->
-    <section class="hero">
+    <!-- AI VISUAL -->
+    <main>
+      <section class="hero">
+        <div class="hero-label">PERSONAL ARTIFICIAL INTELLIGENCE</div>
 
-      <div class="status-line">
-        <span class="pulse"></span>
-        <span id="status">SYSTEM ONLINE</span>
-      </div>
+        <div class="hud" aria-label="JARVIS AI visual">
+          <div class="hud-ring ring-one"></div>
+          <div class="hud-ring ring-two"></div>
+          <div class="hud-ring ring-three"></div>
+          <div class="hud-ring ring-four"></div>
+          <div class="hud-ticks"></div>
 
-      <div class="orb-wrap" aria-label="JARVIS AI animation">
-        <div class="orbit orbit-one"></div>
-        <div class="orbit orbit-two"></div>
+          <div class="ai-face">
+            <div class="face-shine"></div>
+            <div class="eye eye-left"></div>
+            <div class="eye eye-right"></div>
+            <div class="face-mouth"></div>
+          </div>
 
-        <div class="orb">
-          <div class="face">
-            <span></span>
-            <span></span>
+          <span class="hud-point point-one"></span>
+          <span class="hud-point point-two"></span>
+          <span class="hud-point point-three"></span>
+          <span class="hud-point point-four"></span>
+          <div class="scan-line"></div>
+        </div>
+
+        <div class="hero-caption">
+          <span class="caption-line"></span>
+          <span>INTELLIGENCE • EVOLVED</span>
+          <span class="caption-line"></span>
+        </div>
+      </section>
+
+      <!-- CAPABILITY CARDS -->
+      <section class="status-cards">
+        <button class="tech-card" id="voice-card" type="button">
+          <span class="card-icon">♩</span>
+          <span class="card-copy">
+            <strong>VOICE ASSISTANT</strong>
+            <small>Tap to speak</small>
+            <small>or type a message</small>
+          </span>
+        </button>
+
+        <div class="tech-card" id="ai-card">
+          <span class="card-icon">✳</span>
+          <span class="card-copy">
+            <strong>AI READY</strong>
+            <small id="ai-status">Awaiting configuration</small>
+            <small>Ready to assist</small>
+          </span>
+        </div>
+      </section>
+
+      <!-- CHAT -->
+      <section class="conversation">
+        <div class="conversation-heading">
+          <div class="assistant-name">
+            <span class="chat-icon">●</span>
+            <strong>JARVIS</strong>
+          </div>
+          <button id="clear-chat" class="text-button" type="button">
+            CLEAR
+          </button>
+        </div>
+
+        <div id="messages" class="messages" aria-live="polite">
+          <div class="message assistant">
+            <span class="message-label">JARVIS</span>
+            Hello! I'm JARVIS, your personal AI assistant.
+            How can I help you today?
           </div>
         </div>
+      </section>
 
-        <div class="scan-line"></div>
-      </div>
-
-      <h1>At your service.</h1>
-      <p class="subtitle">Your Personal AI Assistant</p>
-
-      <!-- QUICK ACTIONS -->
-      <div class="quick-actions">
-        <button class="quick" data-prompt="What can you do?">
-          ✦ <span>Capabilities</span>
-        </button>
-
-        <button class="quick" data-prompt="Tell me the current time.">
-          ◷ <span>Time</span>
-        </button>
-
-        <button
-          class="quick"
-          data-prompt="Give me a motivational quote.">
-          ❖ <span>Inspire me</span>
-        </button>
-      </div>
-
-    </section>
-
-    <!-- CHAT SECTION -->
-    <section class="conversation-panel">
-
-      <div class="panel-heading">
-        <span>CONVERSATION</span>
-
-        <button
-          id="clear-chat"
-          class="text-button"
-          type="button">
-          CLEAR
-        </button>
-      </div>
-
-      <div id="messages" class="messages" aria-live="polite">
-        <div class="message assistant">
-          <span class="message-label">JARVIS</span>
-          <p>
-            Good day. I am online and ready.
-            Open Settings to configure your AI API key.
-          </p>
+      <!-- MICROPHONE -->
+      <section class="voice-section">
+        <div class="voice-wave" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span>
         </div>
-      </div>
+
+        <button id="mic-button" class="mic-button" type="button"
+                aria-label="Start voice input">
+          <span class="mic-symbol">🎙</span>
+        </button>
+
+        <div id="mic-label">TAP TO SPEAK</div>
+      </section>
 
       <!-- MESSAGE INPUT -->
       <form id="chat-form" class="composer">
+        <span class="input-icon" aria-hidden="true">▤</span>
         <input
           id="prompt"
+          name="prompt"
           type="text"
           placeholder="Ask JARVIS anything..."
           autocomplete="off"
           aria-label="Message JARVIS"
-          required>
-
-        <button
-          class="send-button"
-          type="submit"
-          aria-label="Send message">
-          ➤
-        </button>
+          required
+        >
+        <button type="submit" class="send-button"
+                aria-label="Send message">➤</button>
       </form>
 
-      <!-- MICROPHONE -->
-      <button
-        id="mic-button"
-        class="mic-button"
-        type="button">
-        <span class="mic-icon">🎙</span>
-        <span id="mic-label">TAP TO SPEAK</span>
+      <p class="privacy-note">
+        VOICE INPUT REQUIRES MICROPHONE PERMISSION
+      </p>
+    </main>
+
+    <!-- BOTTOM NAVIGATION -->
+    <nav class="bottom-nav" aria-label="Assistant controls">
+      <button type="button" id="nav-settings">
+        <span>⚙</span>
+        <small>Settings</small>
       </button>
 
-      <p class="hint">
-        Allow microphone permission when prompted.
-      </p>
+      <button type="button" id="nav-voice">
+        <span>♩</span>
+        <small>Voice</small>
+      </button>
 
-    </section>
+      <button type="button" id="nav-history">
+        <span>◷</span>
+        <small>History</small>
+      </button>
+    </nav>
 
-    <footer>
-      JARVIS AI <span>•</span> PERSONAL ASSISTANT
-    </footer>
+    <footer>J.A.R.V.I.S. AI <span>•</span> PERSONAL ASSISTANT</footer>
+  </div>
 
-  </main>
-
-  <!-- SETTINGS DIALOG -->
-  <dialog id="settings-dialog" class="settings-dialog">
-
-    <form id="settings-form" method="dialog">
-
-      <div class="dialog-heading">
-        <h2>System Settings</h2>
-
-        <button
-          class="icon-button"
-          type="button"
-          id="close-settings"
-          aria-label="Close settings">
-          ✕
-        </button>
+  <!-- SETTINGS -->
+  <dialog id="settings-dialog">
+    <div class="settings-content">
+      <div class="settings-header">
+        <div>
+          <p class="eyebrow">SYSTEM CONFIGURATION</p>
+          <h2>JARVIS Settings</h2>
+        </div>
+        <button type="button" id="close-settings"
+                class="round-button" aria-label="Close settings">✕</button>
       </div>
 
-      <label for="api-key">API Key</label>
-      <input
-        id="api-key"
-        type="password"
-        autocomplete="off"
-        placeholder="Enter your API key">
+      <form id="settings-form">
+        <label for="api-key">AI API Key</label>
+        <input id="api-key" name="api-key" type="password"
+               placeholder="Enter your API key" autocomplete="off">
 
-      <label for="api-url">API Endpoint</label>
-      <input
-        id="api-url"
-        type="url"
-        placeholder="https://api.openai.com/v1/chat/completions">
+        <p class="help-text">
+          For personal testing only. A key saved in a browser can be
+          accessed by someone using that device. Never publish your key.
+        </p>
 
-      <label for="model">AI Model</label>
-      <input
-        id="model"
-        type="text"
-        value="gpt-4o-mini"
-        placeholder="Enter supported model name">
+        <label for="api-url">API Endpoint</label>
+        <input id="api-url" name="api-url" type="url"
+               value="https://api.openai.com/v1/chat/completions"
+               placeholder="https://your-api-endpoint">
 
-      <p class="security-note">
-        Your API key is stored locally on this device.
-        Do not use this client-side key storage in a public
-        production app. A secure backend is recommended.
-      </p>
+        <label for="model">AI Model</label>
+        <input id="model" name="model" type="text"
+               value="gpt-4o-mini" placeholder="Model name">
 
-      <button
-        id="save-settings"
-        class="primary-button"
-        type="submit">
-        Save Settings
-      </button>
-
-      <button
-        id="forget-key"
-        class="text-button danger"
-        type="button">
-        Remove Saved Key
-      </button>
-
-    </form>
+        <div class="settings-actions">
+          <button type="submit" class="primary-button">SAVE SETTINGS</button>
+          <button type="button" id="forget-key" class="danger-button">
+            FORGET KEY
+          </button>
+        </div>
+      </form>
+    </div>
   </dialog>
 
-  <!-- JAVASCRIPT -->
-  <script type="module" src="./frontend/script.js"></script>
-
+  <script src="./frontend/script.js" defer></script>
 </body>
 </html>
