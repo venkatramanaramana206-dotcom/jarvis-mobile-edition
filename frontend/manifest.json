@@ -1,1 +1,12 @@
 
+{
+  "name": "J.A.R.V.I.S AI Assistant",
+  "short_name": "JARVIS",
+  "description": "Futuristic personal AI assistant web app",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#050b18",
+  "theme_color": "#050b18",
+  "orientation": "portrait",
+  "icons": []
+}
