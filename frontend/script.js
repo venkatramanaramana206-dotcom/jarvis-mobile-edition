@@ -1,561 +1,898 @@
+ 
+/* ==========================================
+   J.A.R.V.I.S. — MAIN APPLICATION ENGINE
+   File: frontend/script.js
+   Works with index.html and style.css
+   ========================================== */
+
+"use strict";
 
 (() => {
-  "use strict";
-
   const $ = (id) => document.getElementById(id);
 
   const el = {
-    messages: $("messages"),
-    form: $("chatForm"),
-    input: $("userInput"),
-    mic: $("micBtn"),
-    status: $("voiceStatus"),
-    typing: $("typing"),
-    settings: $("settingsDialog"),
-    settingsBtn: $("settingsBtn"),
-    settingsForm: $("settingsForm"),
-    apiKey: $("apiKey"),
+    setupScreen: $("setupScreen"),
+    apiSetupForm: $("apiSetupForm"),
     apiUrl: $("apiUrl"),
-    model: $("modelName"),
-    closeSettings: $("closeSettingsBtn"),
-    removeKey: $("removeKeyBtn"),
-    saveSettings: $("saveSettingsBtn"),
-    speak: $("speakBtn"),
-    stopSpeak: $("stopSpeakBtn"),
-    clear: $("clearBtn"),
-    clock: $("clock"),
-    date: $("dateLine"),
-    toolOutput: $("toolOutput")
-  };
+    apiKey: $("apiKey"),
+    modelName: $("modelName"),
+    setupError: $("setupError"),
+    connectButton: $("connectButton"),
+    skipSetupButton: $("skipSetupButton"),
 
-  const STORE = {
-    key: "jarvis_api_key",
-    url: "jarvis_api_url",
-    model: "jarvis_model",
-    history: "jarvis_chat_history",
-    voice: "jarvis_auto_voice"
+    app: $("app"),
+    systemStatus: $("systemStatus"),
+    settingsButton: $("settingsButton"),
+    hudOrb: $("hudOrb"),
+    heroTitle: $("heroTitle"),
+    heroSubtitle: $("heroSubtitle"),
+    listeningStatus: $("listeningStatus"),
+
+    micButton: $("micButton"),
+    readButton: $("readButton"),
+    stopVoiceButton: $("stopVoiceButton"),
+
+    chatMessages: $("chatMessages"),
+    chatForm: $("chatForm"),
+    userInput: $("userInput"),
+    sendButton: $("sendButton"),
+
+    settingsDialog: $("settingsDialog"),
+    closeSettingsButton: $("closeSettingsButton"),
+    settingsForm: $("settingsForm"),
+    settingsApiUrl: $("settingsApiUrl"),
+    settingsApiKey: $("settingsApiKey"),
+    settingsModelName: $("settingsModelName"),
+    languageSelect: $("languageSelect"),
+    autoSpeakCheckbox: $("autoSpeakCheckbox"),
+    settingsError: $("settingsError"),
+    clearChatButton: $("clearChatButton")
   };
 
   const defaults = {
-    url: "https://api.openai.com/v1/chat/completions",
-    model: "gpt-4o-mini"
+    apiUrl: "https://api.openai.com/v1",
+    model: "gpt-4o-mini",
+    language: "te-IN",
+    autoSpeak: false
   };
 
-  let busy = false;
+  let config = { ...defaults };
+  let conversation = [];
   let recognition = null;
   let listening = false;
-  let voiceLanguage = "te-IN";
-  let lastAnswer = "";
-  let history = [];
-  let voices = [];
+  let speakingText = "";
+  let busy = false;
+  let currentController = null;
 
-  const getSetting = (key, fallback = "") =>
-    localStorage.getItem(key) || fallback;
+  const SYSTEM_PROMPT = [
+    "You are JARVIS, a helpful personal AI assistant.",
+    "You can respond in Telugu or English according to the user's language.",
+    "Be clear, respectful, practical, and concise.",
+    "You are an AI assistant, not the Marvel movie character.",
+    "Never claim you performed a phone action unless it actually succeeded.",
+    "For actions that require Android permissions or native integration,",
+    "explain the limitation and ask the user to use the appropriate control."
+  ].join(" ");
 
-  const setStatus = (message) => {
-    if (el.status) el.status.textContent = message;
-    const systemStatus = $("systemStatus");
-    if (systemStatus) systemStatus.textContent = message;
-  };
+  /* ==========================================
+     CONFIGURATION
+     ========================================== */
 
-  function updateClock() {
-    const now = new Date();
-    if (el.clock) {
-      el.clock.textContent = now.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit"
-      });
+  function normalizeApiUrl(value) {
+    const url = value.trim().replace(/\/+$/, "");
+
+    if (!url) {
+      throw new Error("Please enter an API endpoint.");
     }
-    if (el.date) {
-      el.date.textContent = now.toLocaleDateString([], {
-        weekday: "long",
-        month: "short",
-        day: "numeric"
-      });
+
+    let parsed;
+
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error("Please enter a valid API URL.");
+    }
+
+    if (!["https:", "http:"].includes(parsed.protocol)) {
+      throw new Error("The API URL must use HTTP or HTTPS.");
+    }
+
+    if (
+      parsed.protocol === "http:" &&
+      location.protocol === "https:" &&
+      parsed.hostname !== "localhost" &&
+      parsed.hostname !== "127.0.0.1"
+    ) {
+      throw new Error("Use an HTTPS API endpoint on this website.");
+    }
+
+    if (parsed.username || parsed.password) {
+      throw new Error("Do not put credentials inside the API URL.");
+    }
+
+    return url;
+  }
+
+  function loadConfig() {
+    try {
+      const saved = sessionStorage.getItem("jarvis_config");
+
+      if (saved) {
+        const parsed = JSON.parse(saved);
+
+        config = {
+          ...defaults,
+          ...parsed
+        };
+      }
+    } catch (error) {
+      console.warn("Could not load JARVIS settings.", error);
+    }
+
+    if (el.apiUrl) el.apiUrl.value = config.apiUrl;
+    if (el.modelName) el.modelName.value = config.model;
+
+    if (el.settingsApiUrl) {
+      el.settingsApiUrl.value = config.apiUrl;
+    }
+
+    if (el.settingsModelName) {
+      el.settingsModelName.value = config.model;
+    }
+
+    if (el.languageSelect) {
+      el.languageSelect.value = config.language;
+    }
+
+    if (el.autoSpeakCheckbox) {
+      el.autoSpeakCheckbox.checked = config.autoSpeak;
+    }
+
+    const hasKey = Boolean(config.apiKey);
+
+    if (hasKey) {
+      hideSetup();
+    } else {
+      showSetup();
     }
   }
 
-  function scrollMessages() {
-    if (el.messages) {
-      el.messages.scrollTop = el.messages.scrollHeight;
+  function saveConfig() {
+    try {
+      sessionStorage.setItem(
+        "jarvis_config",
+        JSON.stringify(config)
+      );
+
+      return true;
+    } catch {
+      return false;
     }
   }
 
-  function addMessage(text, who = "ai") {
-    if (!el.messages) return;
+  function showSetup() {
+    el.setupScreen?.classList.add("visible");
 
-    const node = document.createElement("div");
-    node.className = who === "user"
-      ? "message user-message"
-      : "message ai-message";
+    if (el.systemStatus) {
+      el.systemStatus.textContent = "CONFIGURATION REQUIRED";
+    }
+  }
 
-    // Plain text only: do not inject API responses as HTML.
-    node.textContent = text;
-    el.messages.appendChild(node);
-    scrollMessages();
+  function hideSetup() {
+    el.setupScreen?.classList.remove("visible");
+
+    if (el.systemStatus) {
+      el.systemStatus.textContent = "SYSTEM READY";
+    }
+  }
+
+  function validateModel(value) {
+    const model = value.trim();
+
+    if (!model || model.length > 150) {
+      throw new Error("Enter a valid model name.");
+    }
+
+    return model;
+  }
+
+  /* ==========================================
+     STARTUP FORM
+     ========================================== */
+
+  el.apiSetupForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+
+    try {
+      const apiKey = el.apiKey.value.trim();
+
+      if (!apiKey) {
+        throw new Error("Please enter your API key.");
+      }
+
+      config.apiUrl = normalizeApiUrl(
+        el.apiUrl.value || defaults.apiUrl
+      );
+
+      config.apiKey = apiKey;
+      config.model = validateModel(
+        el.modelName.value || defaults.model
+      );
+
+      if (!saveConfig()) {
+        throw new Error(
+          "Browser storage is unavailable. Check your browser settings."
+        );
+      }
+
+      el.apiKey.value = "";
+      el.setupError.textContent = "";
+
+      hideSetup();
+      setStatus("SYSTEM READY", "Connection settings saved.");
+
+    } catch (error) {
+      el.setupError.textContent = error.message;
+    }
+  });
+
+  el.skipSetupButton?.addEventListener("click", () => {
+    hideSetup();
+
+    setStatus(
+      "OFFLINE MODE",
+      "Enter an API key in Settings to enable AI responses."
+    );
+  });
+
+  /* ==========================================
+     STATUS AND HUD
+     ========================================== */
+
+  function setStatus(status, message = "") {
+    if (el.systemStatus) {
+      el.systemStatus.textContent = status;
+    }
+
+    if (el.listeningStatus) {
+      el.listeningStatus.textContent = message;
+    }
+
+    if (el.hudOrb) {
+      el.hudOrb.classList.remove(
+        "listening",
+        "thinking",
+        "speaking"
+      );
+
+      const lower = status.toLowerCase();
+
+      if (lower.includes("listening")) {
+        el.hudOrb.classList.add("listening");
+      } else if (lower.includes("thinking")) {
+        el.hudOrb.classList.add("thinking");
+      } else if (lower.includes("speaking")) {
+        el.hudOrb.classList.add("speaking");
+      }
+    }
   }
 
   function setBusy(value) {
     busy = value;
-    if (el.typing) el.typing.hidden = !value;
-    if (el.input) el.input.disabled = value;
-    if (el.form) {
-      const submit = el.form.querySelector('[type="submit"]');
-      if (submit) submit.disabled = value;
+
+    if (el.sendButton) {
+      el.sendButton.disabled = value;
     }
-    if (value) setStatus("THINKING...");
-    else setStatus("SYSTEM READY");
+
+    if (el.connectButton) {
+      el.connectButton.disabled = value;
+    }
   }
 
-  function getLanguage(text) {
-    // Detect Telugu script; otherwise use English speech.
-    return /[\u0C00-\u0C7F]/.test(text) ? "te-IN" : "en-US";
+  /* ==========================================
+     CHAT MESSAGE RENDERING
+     ========================================== */
+
+  function addMessage(role, text) {
+    const article = document.createElement("article");
+
+    article.className =
+      role === "user"
+        ? "message user-message"
+        : "message assistant-message";
+
+    const label = document.createElement("div");
+    label.className = "message-label";
+    label.textContent =
+      role === "user" ? "YOU" : "J.A.R.V.I.S.";
+
+    const content = document.createElement("div");
+    content.className = "message-content";
+    content.textContent = text;
+
+    article.append(label, content);
+    el.chatMessages.appendChild(article);
+
+    el.chatMessages.scrollTop = el.chatMessages.scrollHeight;
+
+    return content;
   }
 
-  function getApiKey() {
-    return (el.apiKey?.value || getSetting(STORE.key)).trim();
+  function updateMessage(element, text) {
+    if (element) {
+      element.textContent = text;
+      el.chatMessages.scrollTop = el.chatMessages.scrollHeight;
+    }
   }
 
-  function getApiUrl() {
-    return (
-      el.apiUrl?.value ||
-      getSetting(STORE.url, defaults.url)
-    ).trim();
+  function errorMessage(error) {
+    const message = String(error?.message || "");
+
+    if (/failed to fetch|networkerror|load failed/i.test(message)) {
+      return (
+        "Could not connect to the AI service. Check your internet, " +
+        "API endpoint, and whether the service allows browser requests (CORS)."
+      );
+    }
+
+    if (/401|unauthorized|invalid.*key/i.test(message)) {
+      return "API authentication failed. Check your API key.";
+    }
+
+    if (/403|forbidden/i.test(message)) {
+      return "The API refused the request. Check your permissions and account.";
+    }
+
+    if (/429|rate limit|quota/i.test(message)) {
+      return "API rate limit or usage quota reached. Try again later.";
+    }
+
+    return message || "Something went wrong. Please try again.";
   }
 
-  function getModel() {
-    return (
-      el.model?.value ||
-      getSetting(STORE.model, defaults.model)
-    ).trim();
-  }
+  /* ==========================================
+     AI CHAT
+     ========================================== */
 
-  function restoreSettings() {
-    if (el.apiKey) el.apiKey.value = getSetting(STORE.key);
-    if (el.apiUrl) el.apiUrl.value = getSetting(STORE.url, defaults.url);
-    if (el.model) el.model.value = getSetting(STORE.model, defaults.model);
-  }
-
-  function saveSettings(event) {
-    if (event) event.preventDefault();
-
-    const key = (el.apiKey?.value || "").trim();
-    const url = (el.apiUrl?.value || defaults.url).trim();
-    const model = (el.model?.value || defaults.model).trim();
-
-    if (!key) {
-      alert("Please enter your API key.");
-      el.apiKey?.focus();
+  async function askAI(userText) {
+    if (busy) {
+      addMessage(
+        "assistant",
+        "Please wait for my current response to finish."
+      );
       return;
     }
+
+    if (!config.apiKey) {
+      addMessage(
+        "assistant",
+        "AI is not configured yet. Open Settings and enter your API key."
+      );
+
+      showSetup();
+      return;
+    }
+
+    let endpoint;
 
     try {
-      const parsed = new URL(url);
-      if (!["https:", "http:"].includes(parsed.protocol)) {
-        throw new Error("Invalid protocol");
-      }
-    } catch {
-      alert("Enter a valid API URL.");
-      el.apiUrl?.focus();
+      endpoint = normalizeApiUrl(config.apiUrl);
+    } catch (error) {
+      addMessage("assistant", error.message);
       return;
     }
 
-    localStorage.setItem(STORE.key, key);
-    localStorage.setItem(STORE.url, url);
-    localStorage.setItem(STORE.model, model);
+    const userMessage = {
+      role: "user",
+      content: userText
+    };
 
-    if (el.settings?.open) el.settings.close();
-    setStatus("API SETTINGS SAVED");
-    addMessage("API settings saved. You can ask me a question now.", "ai");
-  }
+    conversation.push(userMessage);
 
-  function openSettings() {
-    restoreSettings();
+    addMessage("user", userText);
 
-    if (el.settings?.showModal) {
-      if (!el.settings.open) el.settings.showModal();
-    } else {
-      alert("Settings dialog was not found. Check the ID settingsDialog in index.html.");
-    }
-  }
-
-  function chooseVoice(lang) {
-    voices = window.speechSynthesis?.getVoices?.() || [];
-    const prefix = lang.toLowerCase().split("-")[0];
-
-    return (
-      voices.find(v => v.lang.toLowerCase() === lang.toLowerCase()) ||
-      voices.find(v => v.lang.toLowerCase().startsWith(prefix)) ||
-      voices.find(v => v.default) ||
-      null
+    const responseElement = addMessage(
+      "assistant",
+      "Analyzing your request..."
     );
+
+    setBusy(true);
+    setStatus("THINKING", "Processing your request...");
+
+    currentController = new AbortController();
+
+    try {
+      const response = await fetch(
+        endpoint + "/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + config.apiKey
+          },
+          body: JSON.stringify({
+            model: config.model,
+            messages: [
+              {
+                role: "system",
+                content: SYSTEM_PROMPT
+              },
+              ...conversation.slice(-20)
+            ],
+            temperature: 0.7
+          }),
+          signal: currentController.signal
+        }
+      );
+
+      if (!response.ok) {
+        let detail = "";
+
+        try {
+          const data = await response.json();
+          detail = data?.error?.message || "";
+        } catch {
+          // The API may return a non-JSON error response.
+        }
+
+        throw new Error(
+          "HTTP " + response.status +
+          (detail ? ": " + detail : "")
+        );
+      }
+
+      const data = await response.json();
+
+      const answer =
+        data?.choices?.[0]?.message?.content;
+
+      if (typeof answer !== "string" || !answer.trim()) {
+        throw new Error("The AI returned an empty response.");
+      }
+
+      conversation.push({
+        role: "assistant",
+        content: answer
+      });
+
+      updateMessage(responseElement, answer);
+
+      setStatus("SYSTEM READY", "Response received.");
+
+      if (config.autoSpeak) {
+        speak(answer);
+      }
+
+    } catch (error) {
+      if (error.name === "AbortError") {
+        updateMessage(responseElement, "Request cancelled.");
+        setStatus("SYSTEM READY", "Request cancelled.");
+      } else {
+        updateMessage(
+          responseElement,
+          "JARVIS: " + errorMessage(error)
+        );
+
+        setStatus("CONNECTION ERROR", "Check your API connection.");
+        console.error("JARVIS request failed:", error);
+      }
+
+      // Do not keep a failed user message in the conversation.
+      conversation.pop();
+
+    } finally {
+      currentController = null;
+      setBusy(false);
+    }
   }
 
-  function speak(text, lang = getLanguage(text)) {
-    if (!("speechSynthesis" in window) || !text) {
-      setStatus("VOICE OUTPUT UNAVAILABLE");
+  el.chatForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const text = el.userInput.value.trim();
+
+    if (!text || busy) return;
+
+    el.userInput.value = "";
+
+    // Try safe, explicitly supported device commands first.
+    const handled = await handleDeviceCommand(text);
+
+    if (!handled) {
+      await askAI(text);
+    }
+  });
+
+  el.userInput?.addEventListener("keydown", (event) => {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.isComposing
+    ) {
+      event.preventDefault();
+      el.chatForm.requestSubmit();
+    }
+  });
+
+  /* ==========================================
+     VOICE OUTPUT
+     ========================================== */
+
+  function speak(text) {
+    if (!("speechSynthesis" in window)) {
+      setStatus(
+        "VOICE UNAVAILABLE",
+        "Text-to-speech is not supported in this browser."
+      );
       return;
     }
 
-    window.speechSynthesis.cancel();
+    stopSpeaking();
+
+    speakingText = text;
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang;
+    utterance.lang = config.language || "te-IN";
     utterance.rate = 1;
     utterance.pitch = 1;
     utterance.volume = 1;
 
-    const voice = chooseVoice(lang);
-    if (voice) utterance.voice = voice;
+    utterance.onstart = () => {
+      setStatus("SPEAKING", "JARVIS is speaking...");
+    };
 
-    utterance.onstart = () => setStatus("SPEAKING...");
-    utterance.onend = () => setStatus("SYSTEM READY");
-    utterance.onerror = () => setStatus("VOICE ERROR — USE READ ALOUD");
+    utterance.onend = () => {
+      setStatus("SYSTEM READY", "Ready for your next command.");
+    };
+
+    utterance.onerror = (event) => {
+      if (event.error !== "canceled" && event.error !== "interrupted") {
+        setStatus(
+          "VOICE ERROR",
+          "Voice output could not be completed."
+        );
+      }
+    };
 
     window.speechSynthesis.speak(utterance);
   }
 
-  async function askAI(userText) {
-    const apiKey = getApiKey();
-    const apiUrl = getApiUrl();
-    const model = getModel();
-
-    if (!apiKey) {
-      openSettings();
-      throw new Error("Add your API key in Settings before chatting.");
+  function stopSpeaking() {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
     }
 
-    if (!apiUrl || !model) {
-      throw new Error("Please set the API URL and model in Settings.");
-    }
-
-    const messages = [
-      {
-        role: "system",
-        content:
-          "You are JARVIS, a helpful personal AI assistant. " +
-          "Reply in the same language the user uses. If they use Telugu, " +
-          "reply naturally in Telugu. If they use English, reply in English. " +
-          "If they mix both, you may mix both. Be clear and useful. " +
-          "Never claim you performed a real-world action unless a connected " +
-          "tool actually performed it. Explain when you cannot perform an action."
-      },
-      ...history.slice(-12),
-      { role: "user", content: userText }
-    ];
-
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({ model, messages, temperature: 0.7 })
-    });
-
-    if (!response.ok) {
-      let detail = "";
-      try {
-        const errorData = await response.json();
-        detail = errorData?.error?.message || "";
-      } catch {}
-
-      if (response.status === 401) {
-        throw new Error("API key is invalid. Check it in Settings.");
-      }
-      if (response.status === 429) {
-        throw new Error("API rate limit or quota reached. Check your API account.");
-      }
-      throw new Error(
-        `API request failed (${response.status}). ${detail || "Check API URL, model, and network."}`
-      );
-    }
-
-    const data = await response.json();
-    const answer = data?.choices?.[0]?.message?.content;
-
-    if (typeof answer !== "string" || !answer.trim()) {
-      throw new Error("The API returned no text. Check that your model supports chat completions.");
-    }
-
-    return answer.trim();
+    speakingText = "";
   }
 
-  async function sendToJarvis(text, fromVoice = false) {
-    const userText = String(text || "").trim();
-    if (!userText || busy) return;
+  el.readButton?.addEventListener("click", () => {
+    const messages =
+      el.chatMessages.querySelectorAll(".assistant-message .message-content");
 
-    addMessage(userText, "user");
-    if (el.input) el.input.value = "";
-    setBusy(true);
+    const last = messages[messages.length - 1];
 
-    try {
-      const answer = await askAI(userText);
-      lastAnswer = answer;
-
-      history.push(
-        { role: "user", content: userText },
-        { role: "assistant", content: answer }
-      );
-      history = history.slice(-24);
-
-      try {
-        localStorage.setItem(STORE.history, JSON.stringify(history));
-      } catch {}
-
-      addMessage(answer, "ai");
-
-      if (getSetting(STORE.voice, "true") !== "false") {
-        speak(answer, getLanguage(answer));
-      } else {
-        setStatus("SYSTEM READY");
-      }
-    } catch (error) {
-      const message = error?.message || "Something went wrong.";
-      addMessage("Sorry — " + message, "ai");
-      setStatus("CHECK SETTINGS / CONNECTION");
-    } finally {
-      setBusy(false);
-      if (fromVoice) {
-        // Do not automatically reopen the microphone: it can record
-        // the assistant's own speech on mobile devices.
-        setStatus("READY — TAP MIC TO SPEAK AGAIN");
-      }
-    }
-  }
-
-  function createLanguageButton() {
-    if (!el.mic || $("voiceLanguageBtn")) return;
-
-    const button = document.createElement("button");
-    button.id = "voiceLanguageBtn";
-    button.type = "button";
-    button.textContent = "🎙 తెలుగు";
-    button.title = "Switch speech recognition language";
-    button.style.cssText =
-      "min-height:44px;padding:8px 10px;border:1px solid rgba(84,232,255,.3);" +
-      "border-radius:12px;background:#101e32;color:#eef5ff;font-size:12px;";
-
-    button.addEventListener("click", () => {
-      voiceLanguage = voiceLanguage === "te-IN" ? "en-US" : "te-IN";
-      button.textContent = voiceLanguage === "te-IN"
-        ? "🎙 తెలుగు"
-        : "🎙 English";
-      setStatus(
-        voiceLanguage === "te-IN"
-          ? "VOICE LANGUAGE: TELUGU"
-          : "VOICE LANGUAGE: ENGLISH"
-      );
-      if (recognition && listening) {
-        recognition.stop();
-      }
-    });
-
-    el.mic.insertAdjacentElement("afterend", button);
-  }
-
-  function setupRecognition() {
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setStatus("VOICE INPUT UNSUPPORTED — TYPE BELOW");
-      if (el.mic) el.mic.disabled = true;
+    if (!last || !last.textContent.trim()) {
+      setStatus("SYSTEM READY", "There is no answer to read yet.");
       return;
     }
 
-    recognition = new SpeechRecognition();
-    recognition.lang = voiceLanguage;
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+    speak(last.textContent.trim());
+  });
 
-    let finalTranscript = "";
-
-    recognition.onstart = () => {
-      listening = true;
-      finalTranscript = "";
-      el.mic?.classList.add("listening");
-      el.mic?.setAttribute("aria-pressed", "true");
-      setStatus(
-        voiceLanguage === "te-IN"
-          ? "వింటున్నాను... ఇప్పుడు మాట్లాడు"
-          : "LISTENING... SPEAK NOW"
-      );
-    };
-
-    recognition.onresult = (event) => {
-      let interim = "";
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript + " ";
-        } else {
-          interim += transcript;
-        }
-      }
-
-      if (el.input) {
-        el.input.value = (finalTranscript + interim).trim();
-      }
-    };
-
-    recognition.onerror = (event) => {
-      setStatus(
-        event.error === "not-allowed"
-          ? "MICROPHONE PERMISSION DENIED"
-          : event.error === "no-speech"
-            ? "NO SPEECH DETECTED — TAP MIC TO RETRY"
-            : `VOICE INPUT ERROR: ${event.error}`
-      );
-    };
-
-    recognition.onend = () => {
-      listening = false;
-      el.mic?.classList.remove("listening");
-      el.mic?.setAttribute("aria-pressed", "false");
-
-      const transcript = (finalTranscript || el.input?.value || "").trim();
-
-      if (transcript && !busy) {
-        if (el.input) el.input.value = "";
-        sendToJarvis(transcript, true);
-      } else if (!busy) {
-        setStatus("READY — TAP MIC TO SPEAK");
-      }
-    };
-  }
-
-  function toggleMic() {
-    if (!recognition) {
-      setupRecognition();
-      if (!recognition) return;
-    }
-
-    if (busy) {
-      setStatus("PLEASE WAIT FOR THE CURRENT ANSWER");
-      return;
-    }
+  el.stopVoiceButton?.addEventListener("click", () => {
+    stopSpeaking();
 
     if (listening) {
-      recognition.stop();
+      stopListening();
+    }
+
+    setStatus("SYSTEM READY", "Voice playback stopped.");
+  });
+
+  /* ==========================================
+     VOICE INPUT
+     ========================================== */
+
+  function createRecognition() {
+    const SpeechRecognition =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      return null;
+    }
+
+    const instance = new SpeechRecognition();
+
+    instance.lang = config.language || "te-IN";
+    instance.continuous = false;
+    instance.interimResults = false;
+    instance.maxAlternatives = 1;
+
+    instance.onstart = () => {
+      listening = true;
+
+      setStatus(
+        "LISTENING",
+        "Listening... Speak now."
+      );
+
+      if (el.micButton) {
+        el.micButton.setAttribute("aria-pressed", "true");
+      }
+    };
+
+    instance.onresult = async (event) => {
+      const result = event.results?.[event.resultIndex]?.[0];
+      const transcript = result?.transcript?.trim();
+
+      if (!transcript) return;
+
+      el.userInput.value = transcript;
+
+      setStatus("COMMAND RECEIVED", transcript);
+
+      // Device commands and AI requests use the same route.
+      const handled = await handleDeviceCommand(transcript);
+
+      if (!handled) {
+        await askAI(transcript);
+      }
+    };
+
+    instance.onerror = (event) => {
+      const message =
+        event.error === "not-allowed"
+          ? "Microphone permission denied. Allow microphone access in your browser."
+          : event.error === "no-speech"
+            ? "No speech detected. Tap the microphone and try again."
+            : "Voice input failed: " + event.error;
+
+      setStatus("MICROPHONE ERROR", message);
+    };
+
+    instance.onend = () => {
+      listening = false;
+
+      if (el.micButton) {
+        el.micButton.setAttribute("aria-pressed", "false");
+      }
+
+      if (!busy && !speakingText) {
+        setStatus("SYSTEM READY", "Ready for your next command.");
+      }
+    };
+
+    return instance;
+  }
+
+  function startListening() {
+    stopSpeaking();
+
+    recognition = createRecognition();
+
+    if (!recognition) {
+      setStatus(
+        "VOICE UNAVAILABLE",
+        "This browser does not support speech recognition. Try a compatible browser."
+      );
       return;
     }
 
-    // Set the selected language before starting each recognition session.
-    recognition.lang = voiceLanguage;
-    if (el.input) el.input.value = "";
-
     try {
-      window.speechSynthesis?.cancel();
       recognition.start();
-    } catch {
-      setStatus("MIC BUSY — WAIT A MOMENT AND RETRY");
+    } catch (error) {
+      setStatus(
+        "VOICE ERROR",
+        "Could not start the microphone. Wait and try again."
+      );
+      console.warn("Speech recognition:", error);
     }
   }
 
-  function restoreHistory() {
-    try {
-      const saved = JSON.parse(getSetting(STORE.history, "[]"));
-      if (!Array.isArray(saved)) return;
+  function stopListening() {
+    if (recognition && listening) {
+      recognition.stop();
+    }
 
-      history = saved.filter(
-        item =>
-          item &&
-          ["user", "assistant"].includes(item.role) &&
-          typeof item.content === "string"
-      ).slice(-24);
+    listening = false;
 
-      // Restore recent messages in the visible chat.
-      for (const item of history.slice(-10)) {
-        addMessage(item.content, item.role === "user" ? "user" : "ai");
-      }
-    } catch {
-      history = [];
+    if (el.micButton) {
+      el.micButton.setAttribute("aria-pressed", "false");
     }
   }
 
-  function bindEvents() {
-    el.form?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      sendToJarvis(el.input?.value || "");
-    });
-
-    el.mic?.addEventListener("click", toggleMic);
-    el.settingsBtn?.addEventListener("click", openSettings);
-    el.settingsForm?.addEventListener("submit", saveSettings);
-    el.saveSettings?.addEventListener("click", saveSettings);
-
-    el.closeSettings?.addEventListener("click", () => {
-      if (el.settings?.open) el.settings.close();
-    });
-
-    el.removeKey?.addEventListener("click", () => {
-      localStorage.removeItem(STORE.key);
-      if (el.apiKey) el.apiKey.value = "";
-      setStatus("API KEY REMOVED");
-    });
-
-    el.speak?.addEventListener("click", () => {
-      if (lastAnswer) speak(lastAnswer, getLanguage(lastAnswer));
-      else setStatus("NO ANSWER TO SPEAK YET");
-    });
-
-    el.stopSpeak?.addEventListener("click", () => {
-      window.speechSynthesis?.cancel();
-      setStatus("SPEECH STOPPED");
-    });
-
-    el.clear?.addEventListener("click", () => {
-      if (el.messages) el.messages.replaceChildren();
-      history = [];
-      lastAnswer = "";
-      localStorage.removeItem(STORE.history);
-      setStatus("CHAT CLEARED");
-    });
-
-    // Let the user press Enter to send, Shift+Enter for a new line.
-    el.input?.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        el.form?.requestSubmit();
-      }
-    });
-
-    $("speakToggleBtn")?.addEventListener("click", () => {
-      const enabled = getSetting(STORE.voice, "true") !== "false";
-      localStorage.setItem(STORE.voice, String(!enabled));
-      setStatus(!enabled ? "AUTO VOICE ENABLED" : "AUTO VOICE DISABLED");
-    });
-  }
-
-  function init() {
-    restoreSettings();
-    updateClock();
-    setInterval(updateClock, 1000);
-    restoreHistory();
-    createLanguageButton();
-    setupRecognition();
-    bindEvents();
-
-    if (!getApiKey()) {
-      setStatus("ADD API KEY IN SETTINGS TO START");
+  el.micButton?.addEventListener("click", () => {
+    if (listening) {
+      stopListening();
+      setStatus("SYSTEM READY", "Listening stopped.");
     } else {
-      setStatus("SYSTEM READY");
+      startListening();
+    }
+  });
+
+  /* ==========================================
+     LIMITED ANDROID ACTION ENGINE
+     Browser-only intent launches are best-effort.
+     They are NOT a substitute for native Android code.
+     ========================================== */
+
+  async function handleDeviceCommand(text) {
+    const normalized = text.toLowerCase().trim();
+
+    const settingsCommands = [
+      "open settings",
+      "open phone settings",
+      "సెట్టింగ్స్ ఓపెన్ చేయి",
+      "సెట్టింగ్స్ తెరువు",
+      "ఫోన్ సెట్టింగ్స్ తెరువు"
+    ];
+
+    const cameraCommands = [
+      "open camera",
+      "launch camera",
+      "కెమెరా ఓపెన్ చేయి",
+      "కెమెరా తెరువు"
+    ];
+
+    const isSettings = settingsCommands.some(
+      (command) => normalized === command
+    );
+
+    const isCamera = cameraCommands.some(
+      (command) => normalized === command
+    );
+
+    if (!isSettings && !isCamera) {
+      return false;
     }
 
-    if (window.speechSynthesis) {
-      voices = window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => {
-        voices = window.speechSynthesis.getVoices();
-      };
+    addMessage("user", text);
+
+    if (isSettings) {
+      addMessage(
+        "assistant",
+        "Attempting to open Android Settings. Your browser or device may block this action."
+      );
+
+      try {
+        window.location.href =
+          "intent:#Intent;action=android.settings.SETTINGS;end";
+      } catch {
+        addMessage(
+          "assistant",
+          "Please open Settings manually on your phone."
+        );
+      }
+
+      return true;
     }
+
+    if (isCamera) {
+      addMessage(
+        "assistant",
+        "Attempting to open the camera. This depends on Android and your browser."
+      );
+
+      try {
+        window.location.href =
+          "intent:#Intent;action=android.media.action.IMAGE_CAPTURE;end";
+      } catch {
+        addMessage(
+          "assistant",
+          "Please open the Camera app manually."
+        );
+      }
+
+      return true;
+    }
+
+    return false;
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init, { once: true });
-  } else {
-    init();
+  /* ==========================================
+     SETTINGS
+     ========================================== */
+
+  el.settingsButton?.addEventListener("click", () => {
+    if (!el.settingsDialog) return;
+
+    el.settingsApiUrl.value = config.apiUrl || defaults.apiUrl;
+    el.settingsModelName.value = config.model || defaults.model;
+    el.settingsApiKey.value = "";
+
+    el.settingsError.textContent = "";
+
+    if (typeof el.settingsDialog.showModal === "function") {
+      el.settingsDialog.showModal();
+    } else {
+      setStatus(
+        "SETTINGS UNAVAILABLE",
+        "Your browser does not support this settings dialog."
+      );
+    }
+  });
+
+  el.closeSettingsButton?.addEventListener("click", () => {
+    el.settingsDialog?.close();
+  });
+
+  el.settingsForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+
+    try {
+      const nextUrl = normalizeApiUrl(
+        el.settingsApiUrl.value || defaults.apiUrl
+      );
+
+      const nextModel = validateModel(
+        el.settingsModelName.value || defaults.model
+      );
+
+      const newKey = el.settingsApiKey.value.trim();
+
+      config.apiUrl = nextUrl;
+      config.model = nextModel;
+
+      if (newKey) {
+        config.apiKey = newKey;
+      }
+
+      config.language = el.languageSelect.value || "te-IN";
+      config.autoSpeak = el.autoSpeakCheckbox.checked;
+
+      if (!saveConfig()) {
+        throw new Error("Could not save settings in browser storage.");
+      }
+
+      el.settingsError.textContent = "";
+      el.settingsApiKey.value = "";
+
+      el.settingsDialog.close();
+
+      setStatus("SYSTEM READY", "Settings saved for this browser session.");
+
+    } catch (error) {
+      el.settingsError.textContent = error.message;
+    }
+  });
+
+  el.clearChatButton?.addEventListener("click", () => {
+    conversation = [];
+    stopSpeaking();
+
+    el.chatMessages.replaceChildren();
+
+    addMessage(
+      "assistant",
+      "Conversation cleared. Hello! నేను JARVIS. నన్ను తెలుగులో లేదా Englishలో అడగండి."
+    );
+
+    setStatus("SYSTEM READY", "New conversation started.");
+  });
+
+  /* ==========================================
+     START APPLICATION
+     ========================================== */
+
+  function initialize() {
+    loadConfig();
+
+    if (el.heroTitle) {
+      el.heroTitle.textContent = "How can I help you?";
+    }
+
+    if (el.heroSubtitle) {
+      el.heroSubtitle.textContent = "Your personal AI assistant";
+    }
+
+    if (el.listeningStatus) {
+      el.listeningStatus.textContent = "Awaiting your command...";
+    }
+
+    console.info("J.A.R.V.I.S. frontend initialized.");
   }
+
+  initialize();
+
 })();
