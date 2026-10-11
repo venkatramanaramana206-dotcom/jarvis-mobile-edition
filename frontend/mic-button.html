@@ -1,5 +1,291 @@
- <button id="send">SEND</button>
-<button id="mic-btn">🎙️</button>
-<button id="clear-btn">🧹</button>
-<button id="cam-btn">📷</button>
-<input type="file" id="img-input" accept="image/*" capture="environment" style="display:none">
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#050816">
+  <title>JARVIS Voice Assistant</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      background: #050816;
+      color: #eafaff;
+      font-family: Arial, sans-serif;
+    }
+
+    .voice-panel {
+      width: 100%;
+      max-width: 420px;
+      padding: 30px 22px;
+      text-align: center;
+      background: #0b1226;
+      border: 1px solid #164e70;
+      border-radius: 22px;
+      box-shadow: 0 0 30px #00c8ff18;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      color: #00d9ff;
+      letter-spacing: 4px;
+    }
+
+    .subtitle {
+      margin-bottom: 28px;
+      color: #9bb8cc;
+      font-size: 14px;
+    }
+
+    .mic-button {
+      width: 110px;
+      height: 110px;
+      border: 2px solid #00d9ff;
+      border-radius: 50%;
+      background: #071c32;
+      color: #00d9ff;
+      font-size: 42px;
+      cursor: pointer;
+      box-shadow: 0 0 24px #00d9ff35;
+      transition: 0.2s ease;
+    }
+
+    .mic-button:active {
+      transform: scale(0.94);
+    }
+
+    .mic-button.listening {
+      background: #073b4b;
+      box-shadow: 0 0 35px #00d9ff99;
+      animation: pulse 1.2s infinite;
+    }
+
+    .mic-button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 0 15px #00d9ff66;
+      }
+      50% {
+        box-shadow: 0 0 38px #00d9ffcc;
+      }
+    }
+
+    #status {
+      min-height: 24px;
+      margin: 22px 0 12px;
+      color: #00d9ff;
+      font-size: 14px;
+    }
+
+    #recognizedText {
+      min-height: 70px;
+      padding: 14px;
+      overflow-wrap: anywhere;
+      text-align: left;
+      line-height: 1.5;
+      background: #050b19;
+      border: 1px solid #1a3550;
+      border-radius: 12px;
+      color: #eafaff;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .action-button {
+      flex: 1;
+      padding: 12px 10px;
+      border: 1px solid #17617c;
+      border-radius: 10px;
+      background: #10243a;
+      color: #eafaff;
+      cursor: pointer;
+    }
+
+    .action-button:hover {
+      background: #163651;
+    }
+
+    .hint {
+      margin-top: 18px;
+      color: #829cb0;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="voice-panel">
+    <h1>JARVIS</h1>
+    <p class="subtitle">VOICE CONTROL SYSTEM</p>
+
+    <button
+      id="micButton"
+      class="mic-button"
+      type="button"
+      aria-label="Start voice recognition"
+      title="Start voice recognition"
+    >🎙</button>
+
+    <p id="status" role="status" aria-live="polite">
+      Tap the microphone to speak.
+    </p>
+
+    <div id="recognizedText" aria-live="polite">
+      Your recognized speech will appear here.
+    </div>
+
+    <div class="actions">
+      <button id="speakButton" class="action-button" type="button">
+        🔊 Speak
+      </button>
+
+      <button id="clearButton" class="action-button" type="button">
+        Clear
+      </button>
+    </div>
+
+    <p class="hint">
+      Microphone access may be required. Voice recognition support depends
+      on your browser and device.
+    </p>
+  </main>
+
+  <script>
+    const micButton = document.getElementById("micButton");
+    const statusText = document.getElementById("status");
+    const recognizedText = document.getElementById("recognizedText");
+    const speakButton = document.getElementById("speakButton");
+    const clearButton = document.getElementById("clearButton");
+
+    const SpeechRecognition =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+    let recognition = null;
+    let isListening = false;
+
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.lang = "en-IN";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        isListening = true;
+        micButton.classList.add("listening");
+        micButton.setAttribute("aria-label", "Stop voice recognition");
+        statusText.textContent = "Listening... Speak now.";
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+
+        recognizedText.textContent = transcript || "Listening...";
+      };
+
+      recognition.onerror = (event) => {
+        const messages = {
+          "not-allowed": "Microphone permission denied. Allow microphone access.",
+          "no-speech": "No speech detected. Please try again.",
+          "network": "Network error. Check your internet connection.",
+          "audio-capture": "No microphone was detected."
+        };
+
+        statusText.textContent =
+          messages[event.error] || "Voice recognition error: " + event.error;
+      };
+
+      recognition.onend = () => {
+        isListening = false;
+        micButton.classList.remove("listening");
+        micButton.setAttribute("aria-label", "Start voice recognition");
+
+        if (statusText.textContent === "Listening... Speak now.") {
+          statusText.textContent = "Voice recognition finished.";
+        }
+      };
+    } else {
+      micButton.disabled = true;
+      statusText.textContent =
+        "Voice recognition is not supported in this browser. Try a supported browser.";
+    }
+
+    micButton.addEventListener("click", () => {
+      if (!recognition) return;
+
+      if (isListening) {
+        recognition.stop();
+      } else {
+        recognizedText.textContent = "";
+        try {
+          recognition.start();
+        } catch (error) {
+          statusText.textContent =
+            "Could not start the microphone. Please try again.";
+        }
+      }
+    });
+
+    speakButton.addEventListener("click", () => {
+      const text = recognizedText.textContent.trim();
+
+      if (!text || text === "Your recognized speech will appear here.") {
+        statusText.textContent = "Speak first, then tap Speak.";
+        return;
+      }
+
+      if (!("speechSynthesis" in window)) {
+        statusText.textContent = "Text-to-speech is not supported.";
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "en-IN";
+      utterance.rate = 1;
+
+      window.speechSynthesis.speak(utterance);
+      statusText.textContent = "Speaking...";
+      utterance.onend = () => {
+        statusText.textContent = "Speech finished.";
+      };
+    });
+
+    clearButton.addEventListener("click", () => {
+      if (recognition && isListening) {
+        recognition.stop();
+      }
+
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+
+      recognizedText.textContent = "Your recognized speech will appear here.";
+      statusText.textContent = "Tap the microphone to speak.";
+    });
+  </script>
+</body>
+</html>
