@@ -2,595 +2,237 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#080d18">
-<title>JARVIS AI</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#050b14">
 
-<style>
-:root {
-  --bg:#080d18;
-  --panel:#101a2b;
-  --line:#243650;
-  --cyan:#56e8ff;
-  --blue:#7289ff;
-  --text:#eff6ff;
-  --muted:#93a4bd;
-}
-* { box-sizing:border-box; }
-body {
-  margin:0; min-height:100vh; color:var(--text);
-  font-family:system-ui,-apple-system,sans-serif;
-  background:radial-gradient(ellipse at top,#152e49 0,transparent 45%),var(--bg);
-}
-button,input,select,textarea { font:inherit; }
-button { cursor:pointer; color:var(--text); }
-.hidden { display:none!important; }
-.screen { min-height:100vh; padding:24px 16px; }
-.center { display:grid; place-items:center; }
-.card {
-  width:min(100%,430px); padding:26px;
-  border:1px solid var(--line); border-radius:26px;
-  background:rgba(16,26,43,.94);
-  box-shadow:0 25px 90px #0007;
-}
-.brand { color:var(--cyan); letter-spacing:4px; font-size:12px; font-weight:800; }
-h1 { margin:8px 0; font-size:29px; }
-p { color:var(--muted); line-height:1.6; }
-.field { display:block; margin-top:17px; }
-.field span { display:block; margin-bottom:8px; font-size:13px; color:#c4d3e8; }
-input,select,textarea {
-  width:100%; padding:13px; color:var(--text);
-  background:#080f1d; border:1px solid var(--line);
-  border-radius:12px; outline:none;
-}
-input:focus,select:focus,textarea:focus { border-color:var(--cyan); }
-.primary {
-  width:100%; min-height:48px; margin-top:20px;
-  border:0; border-radius:13px; font-weight:750;
-  color:#06101b; background:linear-gradient(110deg,var(--cyan),#a0baff);
-}
-.secondary {
-  padding:10px 13px; border:1px solid var(--line);
-  border-radius:12px; background:var(--panel);
-}
-.note { font-size:12px; }
-.orb {
-  width:138px; height:138px; margin:22px auto;
-  display:grid; place-items:center; position:relative;
-  border-radius:50%; border:1px solid var(--cyan);
-  background:radial-gradient(circle,#244c69,#0b1424 65%);
-  box-shadow:0 0 40px #56e8ff25,inset 0 0 25px #56e8ff20;
-  animation:float 4s ease-in-out infinite;
-}
-.orb:before,.orb:after {
-  content:""; position:absolute; inset:9px;
-  border:2px solid transparent; border-top-color:var(--cyan);
-  border-bottom-color:var(--blue); border-radius:50%;
-  animation:spin 5s linear infinite;
-}
-.orb:after { inset:20px; border-style:dashed; animation-duration:9s; animation-direction:reverse; }
-.orb span { z-index:1; font-size:36px; }
-@keyframes spin { to { transform:rotate(360deg); } }
-@keyframes float { 50% { transform:translateY(-5px); } }
+  <title>J.A.R.V.I.S. — AI Assistant</title>
 
-.app { width:min(100%,760px); margin:auto; padding:0 14px 28px; }
-header {
-  display:flex; align-items:center; justify-content:space-between;
-  gap:12px; padding:17px 0; border-bottom:1px solid var(--line);
-}
-header h2 { margin:0; letter-spacing:2px; font-size:19px; }
-.status { font-size:12px; color:var(--cyan); margin-top:5px; }
-.hero { text-align:center; padding:14px 0 10px; }
-.hero h1 { font-size:25px; }
-.toolbar { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
-.toolbar button { flex:1; min-width:100px; }
-#messages {
-  display:flex; flex-direction:column; gap:12px;
-  min-height:120px; max-height:36vh; overflow-y:auto;
-  padding:15px 0; scroll-behavior:smooth;
-}
-.msg {
-  max-width:90%; white-space:pre-wrap; overflow-wrap:anywhere;
-  line-height:1.6; font-size:14px; padding:12px 15px;
-  border:1px solid var(--line); border-radius:17px;
-}
-.user { align-self:flex-end; background:#20345a; border-color:#3a5687; }
-.ai { align-self:flex-start; background:#111f30; }
-.composer {
-  display:flex; align-items:flex-end; gap:8px;
-  padding:8px; border:1px solid var(--line);
-  border-radius:19px; background:#101a2b;
-}
-.composer textarea { flex:1; min-width:0; resize:vertical; min-height:44px; max-height:120px; border:0; background:transparent; }
-.composer button { min-height:44px; min-width:44px; border-radius:13px; border:1px solid var(--line); background:#203858; }
-#mic.listening { background:#9d2853; }
-.error { color:#ffb9c5; font-size:13px; }
-footer { text-align:center; color:var(--muted); font-size:11px; padding:14px 0; }
-@media(max-width:420px) {
-  .card { padding:21px; }
-  .screen { padding:16px 12px; }
-  .orb { width:118px; height:118px; }
-  .msg { max-width:96%; }
-}
-@media(prefers-reduced-motion:reduce) {
-  *,*:before,*:after { animation:none!important; }
-}
-</style>
+  <meta name="description"
+        content="Your personal AI assistant with voice interaction.">
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 </head>
 
 <body>
 
-<!-- Startup: shown every time the page is opened -->
-<section id="setupScreen" class="screen center">
-  <div class="card">
-    <div class="brand">STARK INDUSTRIES • PERSONAL AI</div>
-    <div class="orb"><span>◈</span></div>
-    <h1>Initialize JARVIS</h1>
-    <p>Enter your API key to connect your AI assistant and start a session.</p>
+  <!-- STARTUP / API KEY SCREEN -->
+  <section id="setupScreen" class="setup-screen">
+    <div class="setup-card">
+      <div class="setup-logo">J.A.R.V.I.S.</div>
+      <p class="system-label">INITIALIZATION REQUIRED</p>
 
-    <form id="setupForm">
-      <label class="field">
-        <span>API Key</span>
-        <input id="startupKey" type="password" autocomplete="off"
-          placeholder="Paste your API key" required>
-      </label>
+      <h1>Welcome back, Sir.</h1>
+      <p class="setup-description">
+        Configure your AI connection to initialize JARVIS.
+      </p>
 
-      <label class="field">
-        <span>API Endpoint</span>
-        <input id="startupUrl" type="url"
-          value="https://api.openai.com/v1/chat/completions" required>
-      </label>
+      <form id="apiSetupForm">
+        <label for="apiUrl">API Endpoint</label>
+        <input
+          id="apiUrl"
+          type="url"
+          placeholder="https://api.openai.com/v1"
+          autocomplete="url"
+        >
 
-      <label class="field">
-        <span>Model</span>
-        <input id="startupModel" value="gpt-4o-mini" required>
-      </label>
+        <label for="apiKey">API Key</label>
+        <input
+          id="apiKey"
+          type="password"
+          placeholder="Enter your API key"
+          autocomplete="off"
+          required
+        >
 
-      <button class="primary" id="startButton" type="submit">CONNECT & START JARVIS</button>
-      <p id="setupError" class="error" role="alert"></p>
-    </form>
+        <label for="modelName">AI Model</label>
+        <input
+          id="modelName"
+          type="text"
+          value="gpt-4o-mini"
+          placeholder="Enter model name"
+          required
+        >
 
-    <p class="note">Your key is kept in this browser tab's session storage. Use only a trusted device. Never publish your key in GitHub code.</p>
-  </div>
-</section>
+        <p id="setupError" class="error-message" role="alert"></p>
 
-<!-- Main app: appears after a key is entered -->
-<section id="appScreen" class="hidden">
-  <div class="app">
-    <header>
-      <div>
-        <h2>J.A.R.V.I.S.</h2>
-        <div id="status" class="status">SYSTEM READY</div>
+        <button type="submit" id="connectButton" class="primary-button">
+          INITIALIZE JARVIS
+        </button>
+      </form>
+
+      <p class="security-note">
+        Your key should not be committed to GitHub.
+        Browser storage is not a secure vault. For a public deployment,
+        use a protected backend.
+      </p>
+
+      <button type="button" id="skipSetupButton" class="text-button">
+        Continue without API
+      </button>
+    </div>
+  </section>
+
+  <!-- MAIN APPLICATION -->
+  <main id="app" class="app-container">
+
+    <!-- HEADER -->
+    <header class="top-bar">
+      <div class="brand-block">
+        <div class="brand-name">J.A.R.V.I.S.</div>
+        <div id="systemStatus" class="system-status">
+          SYSTEM READY
+        </div>
       </div>
-      <button id="settingsButton" class="secondary" type="button">⚙ Settings</button>
+
+      <button
+        id="settingsButton"
+        class="settings-button"
+        type="button"
+        aria-label="Open settings"
+      >
+        ⚙ Settings
+      </button>
     </header>
 
-    <section class="hero">
-      <div class="orb"><span>◈</span></div>
-      <h1>How can I help you?</h1>
-      <p id="clockLine">Your personal AI assistant</p>
-      <div class="toolbar">
-        <button id="languageButton" class="secondary" type="button">🎙 తెలుగు</button>
-        <button id="readButton" class="secondary" type="button">🔊 Read answer</button>
-        <button id="stopButton" class="secondary" type="button">■ Stop voice</button>
+    <!-- CENTRAL HUD -->
+    <section class="hero-section">
+      <div id="hudOrb" class="hud-orb" aria-label="JARVIS visualizer">
+        <div class="orb-ring ring-one"></div>
+        <div class="orb-ring ring-two"></div>
+        <div class="orb-ring ring-three"></div>
+        <div class="orb-core">
+          <div class="core-diamond"></div>
+        </div>
+      </div>
+
+      <h1 id="heroTitle">How can I help you?</h1>
+      <p id="heroSubtitle">Your personal AI assistant</p>
+      <p id="listeningStatus" class="listening-status" aria-live="polite">
+        Awaiting your command...
+      </p>
+    </section>
+
+    <!-- VOICE CONTROLS -->
+    <section class="voice-controls" aria-label="Voice controls">
+      <button id="micButton" type="button" class="control-button">
+        <span class="control-icon" aria-hidden="true">🎙️</span>
+        <span>తెలుగు / English</span>
+      </button>
+
+      <button id="readButton" type="button" class="control-button">
+        <span class="control-icon" aria-hidden="true">🔊</span>
+        <span>Read answer</span>
+      </button>
+
+      <button id="stopVoiceButton" type="button" class="control-button">
+        <span class="control-icon" aria-hidden="true">■</span>
+        <span>Stop voice</span>
+      </button>
+    </section>
+
+    <!-- CHAT MESSAGES -->
+    <section class="chat-section" aria-label="Conversation">
+      <div id="chatMessages" class="chat-messages" aria-live="polite">
+        <article class="message assistant-message">
+          <div class="message-label">J.A.R.V.I.S.</div>
+          <div class="message-content">
+            Hello! నేను JARVIS. నన్ను తెలుగులో లేదా Englishలో అడగండి.
+          </div>
+        </article>
       </div>
     </section>
 
-    <div id="messages" aria-live="polite">
-      <div class="msg ai">Hello! నేను JARVIS. నన్ను తెలుగులో లేదా Englishలో అడగండి.</div>
-    </div>
+    <!-- TEXT INPUT -->
+    <form id="chatForm" class="chat-form">
+      <label for="userInput" class="visually-hidden">
+        Message JARVIS
+      </label>
 
-    <p id="thinking" class="status hidden">JARVIS IS THINKING...</p>
-    <p id="appError" class="error" role="alert"></p>
+      <textarea
+        id="userInput"
+        rows="1"
+        maxlength="8000"
+        placeholder="Ask JARVIS anything..."
+      ></textarea>
 
-    <form id="chatForm" class="composer">
-      <textarea id="messageInput" placeholder="Message JARVIS..." rows="1" required></textarea>
-      <button id="mic" type="button" aria-label="Start voice input">🎙</button>
-      <button id="sendButton" type="submit" aria-label="Send message">➤</button>
+      <button id="sendButton" type="submit" aria-label="Send message">
+        ➤
+      </button>
     </form>
 
-    <footer>JARVIS AI • Keep your API key private</footer>
-  </div>
-</section>
+    <p class="footer-note">
+      J.A.R.V.I.S. PERSONAL AI SYSTEM
+    </p>
 
-<!-- Settings dialog -->
-<dialog id="settingsDialog" class="card">
-  <h2>JARVIS Settings</h2>
-  <form id="settingsForm">
-    <label class="field"><span>API Key</span>
-      <input id="settingsKey" type="password" autocomplete="off" placeholder="Current key is hidden">
-    </label>
-    <label class="field"><span>API Endpoint</span>
-      <input id="settingsUrl" type="url" required>
-    </label>
-    <label class="field"><span>Model</span>
-      <input id="settingsModel" required>
-    </label>
-    <button class="primary" type="submit">Save settings</button>
-  </form>
-  <button id="closeSettings" class="secondary" type="button">Close</button>
-  <button id="newSession" class="secondary" type="button">Disconnect / New session</button>
-</dialog>
+  </main>
 
-<script>
-(() => {
-  "use strict";
+  <!-- SETTINGS DIALOG -->
+  <dialog id="settingsDialog" class="settings-dialog">
+    <div class="dialog-header">
+      <h2>JARVIS Settings</h2>
+      <button id="closeSettingsButton" type="button"
+              class="close-button" aria-label="Close settings">
+        ✕
+      </button>
+    </div>
 
-  const $ = id => document.getElementById(id);
-  const KEY = "jarvis_session_key";
-  const URL_KEY = "jarvis_session_url";
-  const MODEL_KEY = "jarvis_session_model";
-  const DEFAULT_URL = "https://api.openai.com/v1/chat/completions";
-  const DEFAULT_MODEL = "gpt-4o-mini";
+    <form id="settingsForm">
+      <label for="settingsApiUrl">API Endpoint</label>
+      <input
+        id="settingsApiUrl"
+        type="url"
+        placeholder="https://api.openai.com/v1"
+      >
 
-  let apiKey = "";
-  let apiUrl = DEFAULT_URL;
-  let model = DEFAULT_MODEL;
-  let history = [];
-  let lastAnswer = "";
-  let busy = false;
-  let recognition = null;
-  let listening = false;
-  let speechLanguage = "te-IN";
+      <label for="settingsApiKey">API Key</label>
+      <input
+        id="settingsApiKey"
+        type="password"
+        autocomplete="off"
+        placeholder="Enter a new key if changing it"
+      >
 
-  const setStatus = text => $("status").textContent = text;
-  const showError = text => $("appError").textContent = text;
-  const showSetupError = text => $("setupError").textContent = text;
+      <label for="settingsModelName">AI Model</label>
+      <input
+        id="settingsModelName"
+        type="text"
+        placeholder="gpt-4o-mini"
+      >
 
-  function showSetup() {
-    $("setupScreen").classList.remove("hidden");
-    $("appScreen").classList.add("hidden");
-  }
+      <label for="languageSelect">Voice language</label>
+      <select id="languageSelect">
+        <option value="te-IN">తెలుగు</option>
+        <option value="en-US">English (US)</option>
+        <option value="en-IN">English (India)</option>
+      </select>
 
-  function showApp() {
-    $("setupScreen").classList.add("hidden");
-    $("appScreen").classList.remove("hidden");
-    setStatus("SYSTEM READY");
-    $("messageInput").focus();
-  }
+      <label class="setting-checkbox">
+        <input id="autoSpeakCheckbox" type="checkbox">
+        Read AI answers aloud
+      </label>
 
-  function saveSession() {
-    sessionStorage.setItem(KEY, apiKey);
-    sessionStorage.setItem(URL_KEY, apiUrl);
-    sessionStorage.setItem(MODEL_KEY, model);
-  }
+      <p id="settingsError" class="error-message" role="alert"></p>
 
-  function restoreSession() {
-    apiKey = sessionStorage.getItem(KEY) || "";
-    apiUrl = sessionStorage.getItem(URL_KEY) || DEFAULT_URL;
-    model = sessionStorage.getItem(MODEL_KEY) || DEFAULT_MODEL;
+      <button type="submit" class="primary-button">
+        SAVE SETTINGS
+      </button>
 
-    if (apiKey) showApp();
-    else showSetup();
-  }
+      <button id="clearChatButton" type="button" class="secondary-button">
+        Clear conversation
+      </button>
+    </form>
+  </dialog>
 
-  function validateEndpoint(url) {
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === "https:" ||
-        (parsed.protocol === "http:" &&
-         ["localhost", "127.0.0.1"].includes(parsed.hostname));
-    } catch {
-      return false;
-    }
-  }
+  <noscript>
+    <p>This application requires JavaScript to operate.</p>
+  </noscript>
 
-  $("setupForm").addEventListener("submit", event => {
-    event.preventDefault();
-    showSetupError("");
+  <script src="script.js" defer></script>
 
-    const key = $("startupKey").value.trim();
-    const url = $("startupUrl").value.trim();
-    const selectedModel = $("startupModel").value.trim();
-
-    if (!key) {
-      showSetupError("Please enter your API key.");
-      return;
-    }
-    if (!validateEndpoint(url)) {
-      showSetupError("Enter a valid HTTPS API endpoint.");
-      return;
-    }
-    if (!selectedModel) {
-      showSetupError("Enter a model name.");
-      return;
-    }
-
-    apiKey = key;
-    apiUrl = url;
-    model = selectedModel;
-    saveSession();
-    $("startupKey").value = "";
-    showApp();
-  });
-
-  function addMessage(text, role) {
-    const node = document.createElement("div");
-    node.className = "msg " + (role === "user" ? "user" : "ai");
-    node.textContent = text;
-    $("messages").appendChild(node);
-    $("messages").scrollTop = $("messages").scrollHeight;
-  }
-
-  function detectLanguage(text) {
-    return /[\u0C00-\u0C7F]/.test(text) ? "te-IN" : "en-US";
-  }
-
-  async function callAI(question) {
-    const payload = {
-      model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are JARVIS, a helpful personal AI assistant. " +
-            "Reply in the same language the user uses. If they speak Telugu, " +
-            "answer naturally in Telugu. If they speak English, answer in English. " +
-            "If they mix both languages, you may mix both. " +
-            "Be concise, helpful, and honest about actions you cannot perform."
-        },
-        ...history.slice(-12),
-        { role: "user", content: question }
-      ],
-      temperature: 0.7
-    };
-
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + apiKey
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      let detail = "";
-      try {
-        const body = await response.json();
-        detail = body?.error?.message || "";
-      } catch {}
-
-      if (response.status === 401) {
-        throw new Error("API key is invalid. Check your key in Settings.");
-      }
-      if (response.status === 429) {
-        throw new Error("API quota or rate limit reached. Check your API account.");
-      }
-      throw new Error("API error " + response.status + ": " +
-        (detail || "Check your endpoint, model, and network."));
-    }
-
-    const data = await response.json();
-    const answer = data?.choices?.[0]?.message?.content;
-    if (typeof answer !== "string" || !answer.trim()) {
-      throw new Error("The API returned an empty answer.");
-    }
-    return answer.trim();
-  }
-
-  async function sendMessage(rawText) {
-    const question = rawText.trim();
-    if (!question || busy) return;
-
-    showError("");
-    addMessage(question, "user");
-    $("messageInput").value = "";
-    busy = true;
-    $("sendButton").disabled = true;
-    $("thinking").classList.remove("hidden");
-    setStatus("THINKING...");
-
-    try {
-      const answer = await callAI(question);
-      history.push(
-        { role: "user", content: question },
-        { role: "assistant", content: answer }
-      );
-      history = history.slice(-24);
-      lastAnswer = answer;
-      addMessage(answer, "ai");
-      speak(answer);
-    } catch (error) {
-      const message = error?.message || "Unable to connect to AI.";
-      showError(message);
-      addMessage("JARVIS: " + message, "ai");
-      setStatus("CONNECTION ERROR");
-    } finally {
-      busy = false;
-      $("sendButton").disabled = false;
-      $("thinking").classList.add("hidden");
-      if (!listening && !$("appError").textContent) setStatus("SYSTEM READY");
-    }
-  }
-
-  function getVoice(lang) {
-    const voices = speechSynthesis.getVoices();
-    const prefix = lang.split("-")[0].toLowerCase();
-    return voices.find(v => v.lang.toLowerCase() === lang.toLowerCase()) ||
-      voices.find(v => v.lang.toLowerCase().startsWith(prefix)) ||
-      null;
-  }
-
-  function speak(text) {
-    if (!("speechSynthesis" in window)) {
-      setStatus("VOICE OUTPUT NOT SUPPORTED");
-      return;
-    }
-    speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = detectLanguage(text);
-    utterance.rate = 1;
-    const voice = getVoice(utterance.lang);
-    if (voice) utterance.voice = voice;
-    utterance.onstart = () => setStatus("SPEAKING...");
-    utterance.onend = () => setStatus("SYSTEM READY");
-    utterance.onerror = () => setStatus("VOICE UNAVAILABLE — TRY READ ANSWER");
-    speechSynthesis.speak(utterance);
-  }
-
-  function setupRecognition() {
-    const SpeechAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechAPI) {
-      $("mic").disabled = true;
-      showError("Voice input is not supported in this browser. Please type your message.");
-      return;
-    }
-
-    recognition = new SpeechAPI();
-    recognition.lang = speechLanguage;
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    let transcript = "";
-
-    recognition.onstart = () => {
-      listening = true;
-      transcript = "";
-      $("mic").classList.add("listening");
-      setStatus(speechLanguage === "te-IN" ? "వింటున్నాను... మాట్లాడండి" : "LISTENING...");
-    };
-
-    recognition.onresult = event => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const value = event.results[i][0].transcript;
-        if (event.results[i].isFinal) transcript += value + " ";
-        else interim += value;
-      }
-      $("messageInput").value = (transcript + interim).trim();
-    };
-
-    recognition.onerror = event => {
-      showError(event.error === "not-allowed"
-        ? "Microphone permission denied. Allow microphone access in your browser."
-        : "Voice input error: " + event.error);
-    };
-
-    recognition.onend = () => {
-      listening = false;
-      $("mic").classList.remove("listening");
-      const finalText = transcript.trim();
-      if (finalText) {
-        $("messageInput").value = "";
-        sendMessage(finalText);
-      } else if (!busy) {
-        setStatus("READY — TAP MIC TO TRY AGAIN");
-      }
-    };
-  }
-
-  $("mic").addEventListener("click", () => {
-    showError("");
-    if (!recognition) {
-      setupRecognition();
-      if (!recognition) return;
-    }
-    if (busy) {
-      setStatus("WAIT FOR THE CURRENT ANSWER");
-      return;
-    }
-    if (listening) {
-      recognition.stop();
-      return;
-    }
-
-    recognition.lang = speechLanguage;
-    $("messageInput").value = "";
-    try {
-      speechSynthesis?.cancel();
-      recognition.start();
-    } catch {
-      setStatus("MIC BUSY — TRY AGAIN");
-    }
-  });
-
-  $("languageButton").addEventListener("click", () => {
-    speechLanguage = speechLanguage === "te-IN" ? "en-US" : "te-IN";
-    $("languageButton").textContent =
-      speechLanguage === "te-IN" ? "🎙 తెలుగు" : "🎙 English";
-    setStatus(speechLanguage === "te-IN" ? "VOICE: TELUGU" : "VOICE: ENGLISH");
-    if (recognition && listening) recognition.stop();
-  });
-
-  $("chatForm").addEventListener("submit", event => {
-    event.preventDefault();
-    sendMessage($("messageInput").value);
-  });
-
-  $("messageInput").addEventListener("keydown", event => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      $("chatForm").requestSubmit();
-    }
-  });
-
-  $("readButton").addEventListener("click", () => {
-    if (lastAnswer) speak(lastAnswer);
-    else showError("Ask a question first, then you can play the answer.");
-  });
-
-  $("stopButton").addEventListener("click", () => {
-    speechSynthesis?.cancel();
-    setStatus("VOICE STOPPED");
-  });
-
-  $("settingsButton").addEventListener("click", () => {
-    $("settingsKey").value = "";
-    $("settingsUrl").value = apiUrl;
-    $("settingsModel").value = model;
-    $("settingsDialog").showModal();
-  });
-
-  $("settingsForm").addEventListener("submit", event => {
-    event.preventDefault();
-    const newKey = $("settingsKey").value.trim();
-    const newUrl = $("settingsUrl").value.trim();
-    const newModel = $("settingsModel").value.trim();
-
-    if (newKey) apiKey = newKey;
-    if (!validateEndpoint(newUrl)) {
-      showError("Enter a valid HTTPS API endpoint.");
-      return;
-    }
-    if (!newModel) {
-      showError("Model name is required.");
-      return;
-    }
-
-    apiUrl = newUrl;
-    model = newModel;
-    saveSession();
-    $("settingsDialog").close();
-    showError("");
-    setStatus("SETTINGS SAVED");
-  });
-
-  $("closeSettings").addEventListener("click", () => {
-    $("settingsDialog").close();
-  });
-
-  $("newSession").addEventListener("click", () => {
-    sessionStorage.removeItem(KEY);
-    sessionStorage.removeItem(URL_KEY);
-    sessionStorage.removeItem(MODEL_KEY);
-    apiKey = "";
-    history = [];
-    lastAnswer = "";
-    speechSynthesis?.cancel();
-    $("settingsDialog").close();
-    $("messages").replaceChildren();
-    showSetup();
-  });
-
-  if ("speechSynthesis" in window) {
-    speechSynthesis.getVoices();
-    speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
-  }
-
-  setupRecognition();
-  restoreSession();
-})();
-</script>
 </body>
 </html>
