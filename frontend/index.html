@@ -1,165 +1,128 @@
-<!DOCTYPE html>
-<html lang="te">
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#050b18">
-  <title>J.A.R.V.I.S AI</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="css/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#04101f">
+  <meta name="description" content="J.A.R.V.I.S. AI — a futuristic personal assistant web app.">
+  <title>J.A.R.V.I.S. AI</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icons/icon-192.png" type="image/png">
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <main class="app">
+  <div class="app-shell">
     <header class="topbar">
-      <div class="brand">
-        <span class="brand-icon">J</span>
-        <div>
-          <h1>J.A.R.V.I.S</h1>
-          <p>PERSONAL AI SYSTEM</p>
-        </div>
-      </div>
-      <span class="status"><i></i> ONLINE</span>
+      <button class="icon-btn mobile-menu" id="menuToggle" aria-label="Open navigation">☰</button>
+      <div class="brand-mark"><span class="brand-dot"></span><div><strong>J.A.R.V.I.S.</strong><small>AI ASSISTANT</small></div></div>
+      <div class="top-actions"><span id="onlineStatus" class="status-pill">● ONLINE</span><button class="icon-btn" id="settingsShortcut" aria-label="Settings">⚙</button></div>
     </header>
 
-    <section class="hero">
-      <p class="eyebrow">ARTIFICIAL INTELLIGENCE</p>
-      <div class="reactor" id="reactor">
-        <div class="orbit orbit-one"></div>
-        <div class="orbit orbit-two"></div>
-        <div class="orbit orbit-three"></div>
-        <button id="voiceButton" class="core" aria-label="Start voice command">
-          <span>J</span>
-          <small>LISTEN</small>
-        </button>
-      </div>
-      <h2 id="greeting">SYSTEM READY</h2>
-      <p id="assistantStatus">మీ ఆదేశం కోసం సిద్ధంగా ఉన్నాను.</p>
-    </section>
+    <aside class="sidebar" id="sidebar">
+      <div class="side-label">COMMAND CENTER</div>
+      <button class="nav-item active" data-view="home"><span>⌂</span> Dashboard</button>
+      <button class="nav-item" data-view="chat"><span>◉</span> AI Chat</button>
+      <button class="nav-item" data-view="weather"><span>☼</span> Weather</button>
+      <button class="nav-item" data-view="music"><span>♫</span> Music Player</button>
+      <button class="nav-item" data-view="media"><span>▣</span> Photo Lab</button>
+      <button class="nav-item" data-view="notes"><span>▤</span> Notes</button>
+      <button class="nav-item" data-view="tools"><span>⌘</span> Quick Tools</button>
+      <button class="nav-item" data-view="settings"><span>⚙</span> Settings</button>
+      <div class="sidebar-foot"><span class="pulse"></span> All systems ready<br><small>Local features available offline</small></div>
+    </aside>
 
-    <section class="clock-grid">
-      <article class="panel">
-        <span class="panel-label">LOCAL TIME</span>
-        <strong id="clock">--:--:--</strong>
-        <span id="dateText">Loading date...</span>
-      </article>
-      <article class="panel">
-        <span class="panel-label">WEATHER</span>
-        <strong id="temperature">--°C</strong>
-        <span id="weatherText">నగరాన్ని ఎంచుకోండి</span>
-      </article>
-    </section>
+    <main class="main-content">
+      <section class="view active" id="view-home">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow"><span class="pulse"></span> PERSONAL ASSISTANT ONLINE</div>
+            <h1>Good evening,<br><span>what can I do for you?</span></h1>
+            <p>Your command center for ideas, voice, tools and everyday tasks.</p>
+            <div class="hero-buttons"><button class="primary-btn" id="startVoice">🎙 Start voice</button><button class="secondary-btn" id="goChat">Open AI chat ↗</button></div>
+          </div>
+          <div class="reactor-wrap" aria-label="Animated JARVIS reactor">
+            <div class="reactor"><div class="reactor-ring ring-one"></div><div class="reactor-ring ring-two"></div><div class="reactor-ring ring-three"></div><div class="reactor-core"><span>J</span><small>READY</small></div><div class="reactor-tick"></div></div>
+            <div class="reactor-caption">NEURAL CORE <span>● STANDBY</span></div>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <article class="stat-card"><span class="stat-icon">◷</span><div><small>LOCAL TIME</small><strong id="clock">--:--:--</strong><span id="dateText">Loading date…</span></div></article>
+          <article class="stat-card"><span class="stat-icon">◈</span><div><small>SYSTEM STATUS</small><strong id="systemStatus">Operational</strong><span id="networkText">Checking connection…</span></div></article>
+          <article class="stat-card"><span class="stat-icon">☼</span><div><small>WEATHER</small><strong id="homeWeather">Not configured</strong><span>Set an API key in Settings</span></div></article>
+        </div>
+        <div class="section-heading"><div><div class="eyebrow">QUICK ACCESS</div><h2>What would you like to do?</h2></div></div>
+        <div class="quick-grid">
+          <button class="quick-card" data-open="chat"><span class="quick-icon">◉</span><strong>Talk to AI</strong><small>Ask, plan, create</small><span class="card-arrow">↗</span></button>
+          <button class="quick-card" data-open="weather"><span class="quick-icon">☼</span><strong>Check weather</strong><small>Current local forecast</small><span class="card-arrow">↗</span></button>
+          <button class="quick-card" data-open="music"><span class="quick-icon">♫</span><strong>Play music</strong><small>Choose a local audio file</small><span class="card-arrow">↗</span></button>
+          <button class="quick-card" data-open="notes"><span class="quick-icon">▤</span><strong>Take a note</strong><small>Saved on this device</small><span class="card-arrow">↗</span></button>
+          <button class="quick-card" data-open="media"><span class="quick-icon">▣</span><strong>Photo lab</strong><small>Basic image adjustments</small><span class="card-arrow">↗</span></button>
+          <button class="quick-card" data-open="tools"><span class="quick-icon">⌘</span><strong>Quick tools</strong><small>Calculator & shortcuts</small><span class="card-arrow">↗</span></button>
+        </div>
+      </section>
 
-    <section class="panel command-panel">
-      <label for="commandInput">COMMAND CENTER</label>
-      <div class="command-row">
-        <input id="commandInput" type="text"
-          placeholder="ఉదా: What is the time?"
-          autocomplete="off">
-        <button id="sendButton" class="primary-button">SEND</button>
-      </div>
-      <div class="quick-actions">
-        <button data-command="time">Time</button>
-        <button data-command="weather">Weather</button>
-        <button data-command="news">News</button>
-        <button data-command="open youtube">YouTube</button>
-        <button data-command="camera">Camera</button>
-      </div>
-      <p id="response" class="response" aria-live="polite">
-        JARVIS initialized.
-      </p>
-    </section>
+      <section class="view" id="view-chat">
+        <div class="page-heading"><div class="eyebrow">NEURAL INTERFACE</div><h1>AI Chat</h1><p>Chat with your configured AI provider, or use local commands without an API key.</p></div>
+        <div class="chat-layout">
+          <div class="panel chat-panel"><div class="panel-title"><div><span class="live-dot"></span><strong>J.A.R.V.I.S. interface</strong></div><button class="text-btn" id="clearChat">Clear chat</button></div>
+            <div id="chatMessages" class="chat-messages" aria-live="polite"><div class="message assistant"><div class="avatar">J</div><div class="bubble"><strong>J.A.R.V.I.S.</strong><p>Systems online. Ask me a question, or try “calculate 12 * 8”, “what time is it”, or “open weather”.</p></div></div></div>
+            <form id="chatForm" class="chat-compose"><button type="button" class="icon-btn" id="chatMic" aria-label="Voice input">🎙</button><input id="chatInput" autocomplete="off" placeholder="Send a message or command…" aria-label="Message"><button class="send-btn" type="submit" aria-label="Send message">➤</button></form>
+            <div class="compose-hint">Enter to send · Voice recognition depends on browser support</div>
+          </div>
+          <aside class="panel prompt-panel"><div class="panel-title"><strong>Try a command</strong></div><button class="suggestion" data-prompt="What can you do?">What can you do? <span>→</span></button><button class="suggestion" data-prompt="Calculate 144 / 12">Calculate 144 / 12 <span>→</span></button><button class="suggestion" data-prompt="What time is it?">What time is it? <span>→</span></button><button class="suggestion" data-prompt="Open weather">Open weather <span>→</span></button><div class="privacy-note">🔒 API keys stay in this browser’s local storage. Do not use a public/shared device.</div></aside>
+        </div>
+      </section>
 
-    <section class="feature-grid">
-      <button class="feature-card" data-command="weather">
-        <span>◉</span><strong>Weather</strong><small>Live forecast</small>
-      </button>
-      <button class="feature-card" data-command="news">
-        <span>▤</span><strong>News</strong><small>Latest headlines</small>
-      </button>
-      <button class="feature-card" data-command="music">
-        <span>♫</span><strong>Music</strong><small>Play audio</small>
-      </button>
-      <button class="feature-card" data-command="open youtube">
-        <span>▷</span><strong>YouTube</strong><small>Video search</small>
-      </button>
-      <button class="feature-card" data-command="camera">
-        <span>◎</span><strong>Camera</strong><small>Camera preview</small>
-      </button>
-      <button class="feature-card" data-command="video editor">
-        <span>▣</span><strong>Video Studio</strong><small>Edit & export</small>
-      </button>
-      <button class="feature-card" data-command="call">
-        <span>☎</span><strong>Call</strong><small>Open dialer</small>
-      </button>
-      <button class="feature-card" data-command="share">
-        <span>↗</span><strong>Share</strong><small>Share a file</small>
-      </button>
-    </section>
+      <section class="view" id="view-weather">
+        <div class="page-heading"><div class="eyebrow">LIVE CONDITIONS</div><h1>Weather</h1><p>Uses OpenWeather when you add your own key in Settings.</p></div>
+        <div class="panel weather-panel"><form id="weatherForm" class="inline-form"><input id="weatherCity" placeholder="Enter city name (e.g. Tirupati)" aria-label="City name"><button class="primary-btn" type="submit">Get weather</button></form><div id="weatherResult" class="weather-result empty-state"><div class="big-weather-icon">☼</div><h3>Weather ready</h3><p>Enter a city. Add an OpenWeather API key in Settings for live results.</p></div></div>
+      </section>
 
-    <section class="panel">
-      <h3>WEATHER LOCATION</h3>
-      <div class="command-row">
-        <input id="cityInput" placeholder="Enter city, e.g. Tirupati">
-        <button id="cityButton" class="primary-button">SET</button>
-      </div>
-      <button id="locationButton" class="secondary-button">
-        Use device location
-      </button>
-    </section>
+      <section class="view" id="view-music">
+        <div class="page-heading"><div class="eyebrow">AUDIO SYSTEM</div><h1>Music Player</h1><p>Play audio files from your device. Files are not uploaded.</p></div>
+        <div class="music-layout"><div class="panel music-art"><div class="vinyl"><div class="vinyl-center">J</div></div><div class="now-playing"><small>NOW PLAYING</small><h2 id="trackName">No track selected</h2><p id="trackMeta">Choose an audio file to begin</p></div><input type="file" id="audioFile" accept="audio/*" multiple class="file-input"><label for="audioFile" class="primary-btn file-label">＋ Choose audio files</label></div>
+        <div class="panel playlist-panel"><div class="panel-title"><strong>Your playlist</strong><span id="trackCount" class="muted">0 tracks</span></div><div id="playlist" class="playlist empty-state">Your selected tracks will appear here.</div><audio id="audioPlayer" controls preload="metadata"></audio></div></div>
+      </section>
 
-    <section class="panel">
-      <h3>MEDIA CENTER</h3>
-      <label class="file-button">
-        Select audio
-        <input id="audioInput" type="file" accept="audio/*" hidden>
-      </label>
-      <audio id="audioPlayer" controls></audio>
-      <label class="file-button">
-        Select video to edit
-        <input id="videoInput" type="file" accept="video/*" hidden>
-      </label>
-      <video id="videoPreview" controls playsinline></video>
+      <section class="view" id="view-media">
+        <div class="page-heading"><div class="eyebrow">CREATIVE TOOLS</div><h1>Photo Lab</h1><p>Local, basic photo adjustments using your browser. Nothing is uploaded.</p></div>
+        <div class="media-layout"><div class="panel media-preview"><div id="imageStage" class="image-stage"><div class="empty-state"><div class="big-weather-icon">▧</div><h3>Choose an image</h3><p>Upload a photo to adjust brightness, contrast and saturation.</p></div></div><input id="imageFile" type="file" accept="image/*" class="file-input"><label for="imageFile" class="primary-btn file-label">＋ Choose photo</label></div>
+        <div class="panel editor-controls"><h3>Adjustments</h3><label class="range-label">Brightness <output id="brightnessOut">100%</output><input type="range" id="brightness" min="30" max="180" value="100"></label><label class="range-label">Contrast <output id="contrastOut">100%</output><input type="range" id="contrast" min="30" max="180" value="100"></label><label class="range-label">Saturation <output id="saturationOut">100%</output><input type="range" id="saturation" min="0" max="200" value="100"></label><div class="button-row"><button class="secondary-btn" id="resetImage">Reset</button><button class="primary-btn" id="downloadImage" disabled>Download edited image</button></div><p class="muted small">Text overlays, merging and video export are not included; this tool only exports adjusted images.</p></div></div>
+      </section>
 
-      <div class="edit-controls">
-        <label>Trim start (seconds)
-          <input id="trimStart" type="number" min="0" value="0">
-        </label>
-        <label>Trim end (seconds)
-          <input id="trimEnd" type="number" min="0" value="10">
-        </label>
-        <label>Overlay text
-          <input id="overlayText" type="text" placeholder="My video">
-        </label>
-        <label>Crop mode
-          <select id="cropMode">
-            <option value="contain">Fit entire video</option>
-            <option value="cover">Fill / crop edges</option>
-          </select>
-        </label>
-      </div>
-      <button id="exportButton" class="primary-button">EXPORT VIDEO</button>
-      <progress id="exportProgress" max="100" value="0"></progress>
-      <p id="exportStatus" class="response"></p>
-      <a id="downloadVideo" hidden>Download exported video</a>
-      <button id="shareButton" class="secondary-button">Share exported video</button>
-    </section>
+      <section class="view" id="view-notes">
+        <div class="page-heading"><div class="eyebrow">PERSONAL MEMORY</div><h1>Notes</h1><p>Notes are saved locally in this browser on this device.</p></div>
+        <div class="notes-layout"><form id="noteForm" class="panel note-editor"><label for="noteTitle">Title</label><input id="noteTitle" maxlength="100" placeholder="Note title"><label for="noteBody">Note</label><textarea id="noteBody" rows="7" placeholder="Write something to remember…" required></textarea><button class="primary-btn" type="submit">Save note</button></form><div class="panel notes-list-panel"><div class="panel-title"><strong>Saved notes</strong><span id="notesCount" class="muted">0 notes</span></div><div id="notesList" class="notes-list empty-state">No notes yet. Create your first note.</div></div></div>
+      </section>
 
-    <section class="panel">
-      <h3>API SETTINGS</h3>
-      <p class="muted">
-        Keys are saved in this browser on this device. For a public production
-        app, use a secure backend rather than exposing private API keys.
-      </p>
-      <label>NewsAPI key
-        <input id="newsApiKey" type="password" placeholder="Paste NewsAPI key">
-      </label>
-      <button id="saveSettings" class="primary-button">SAVE SETTINGS</button>
-      <button id="openSettings" class="secondary-button">Manage API settings</button>
-    </section>
+      <section class="view" id="view-tools">
+        <div class="page-heading"><div class="eyebrow">UTILITY SUITE</div><h1>Quick Tools</h1><p>Small tools and links that work within browser permissions.</p></div>
+        <div class="tools-grid">
+          <div class="panel tool-card"><div class="tool-icon">＋</div><h3>Calculator</h3><p>Basic arithmetic using a safe expression parser.</p><form id="calcForm" class="calc-form"><input id="calcInput" placeholder="e.g. (12 + 8) * 3" aria-label="Math expression"><button class="primary-btn" type="submit">Calculate</button></form><div id="calcResult" class="calc-result">Result appears here</div></div>
+          <div class="panel tool-card"><div class="tool-icon">☎</div><h3>Phone shortcuts</h3><p>These links ask Android to open a compatible app. Your browser may show a confirmation.</p><label>Phone number</label><input id="phoneNumber" inputmode="tel" placeholder="+91 98765 43210"><div class="button-row"><button id="callBtn" class="secondary-btn">Call</button><button id="smsBtn" class="secondary-btn">SMS</button><button id="waBtn" class="primary-btn">WhatsApp</button></div></div>
+          <div class="panel tool-card"><div class="tool-icon">◉</div><h3>Voice & speech</h3><p>Voice recognition availability varies by browser and may require internet. Speech output uses the browser’s speech engine.</p><div class="button-row"><button id="voiceToolBtn" class="primary-btn">Start listening</button><button id="speakTestBtn" class="secondary-btn">Test speech</button></div><div id="voiceStatus" class="muted small">Ready</div></div>
+          <div class="panel tool-card"><div class="tool-icon">↗</div><h3>Open a website</h3><p>Open a common service in a new browser tab.</p><div class="button-row"><button class="secondary-btn" data-url="https://www.youtube.com/">YouTube</button><button class="secondary-btn" data-url="https://www.google.com/">Google</button><button class="secondary-btn" data-url="https://news.google.com/">News</button></div></div>
+        </div>
+      </section>
 
-    <footer>J.A.R.V.I.S • PERSONAL ASSISTANT • WEB EDITION</footer>
-  </main>
+      <section class="view" id="view-settings">
+        <div class="page-heading"><div class="eyebrow">CONFIGURATION</div><h1>Settings</h1><p>Keys are stored only in this browser’s local storage. For production, use a backend proxy to protect secrets.</p></div>
+        <div class="settings-layout"><form id="settingsForm" class="panel settings-form"><div class="panel-title"><strong>API connections</strong><span class="muted">Optional</span></div>
+          <label for="aiProvider">AI provider</label><select id="aiProvider"><option value="gemini">Google Gemini</option><option value="openai">OpenAI-compatible API</option></select>
+          <label for="aiKey">AI API key</label><div class="secret-row"><input id="aiKey" type="password" autocomplete="off" placeholder="Paste your API key"><button type="button" class="secondary-btn reveal-btn" data-reveal="aiKey">Show</button></div>
+          <label for="aiModel">Model</label><input id="aiModel" placeholder="gemini-2.5-flash">
+          <label for="aiEndpoint">API endpoint (OpenAI-compatible only)</label><input id="aiEndpoint" type="url" placeholder="https://api.openai.com/v1/chat/completions">
+          <div class="divider"></div><label for="weatherKey">OpenWeather API key</label><div class="secret-row"><input id="weatherKey" type="password" autocomplete="off" placeholder="Optional weather key"><button type="button" class="secondary-btn reveal-btn" data-reveal="weatherKey">Show</button></div>
+          <div class="divider"></div><label for="language">Speech language</label><select id="language"><option value="en-US">English (US)</option><option value="en-IN">English (India)</option><option value="te-IN">Telugu</option><option value="hi-IN">Hindi</option></select>
+          <label class="check-row"><input id="autoSpeak" type="checkbox"> Read AI replies aloud</label><button class="primary-btn" type="submit">Save settings</button><div id="settingsStatus" class="muted small" role="status"></div>
+        </form>
+        <div class="panel info-panel"><div class="tool-icon">🔐</div><h3>Security & compatibility</h3><ul><li>Never commit real API keys to GitHub.</li><li>Keys entered here remain in this browser profile, but local storage is not a secure vault.</li><li>GitHub Pages is static hosting; public client-side API calls expose the key to the device user and may be restricted by provider CORS or API policies.</li><li>For secure public deployment, connect a private backend proxy.</li><li>Voice input needs browser support and microphone permission.</li><li>Offline mode caches the app shell; AI and live weather require internet.</li></ul><button class="secondary-btn" id="installBtn" hidden>Install J.A.R.V.I.S.</button><p id="installHelp" class="muted small">Use Chrome’s menu → Install app / Add to Home screen when available.</p></div></div>
+      </section>
 
-  <script type="module" src="js/app.js"></script>
+      <footer class="app-footer"><span>J.A.R.V.I.S. AI</span><span>Built for your browser · Respecting your permissions</span></footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js" defer></script>
 </body>
 </html>
